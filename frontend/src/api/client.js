@@ -1,0 +1,145 @@
+import axios from 'axios'
+
+const BASE_URL = import.meta.env.VITE_API_URL || ''
+
+export const api = axios.create({
+  baseURL: BASE_URL,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+// Response interceptor for error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const message = error.response?.data?.detail || error.message || 'Request failed'
+    return Promise.reject(new Error(message))
+  }
+)
+
+// Chat API
+export const chatApi = {
+  send: (message, sessionId, projectId) =>
+    api.post('/api/chat', { message, session_id: sessionId, project_id: projectId, stream: false }),
+  getHistory: (sessionId, projectId, limit = 50) =>
+    api.get('/api/chat/history', { params: { session_id: sessionId, project_id: projectId, limit } }),
+  getSessions: (projectId, limit = 20) =>
+    api.get('/api/chat/sessions', { params: { project_id: projectId, limit } }),
+}
+
+// Memory API
+export const memoryApi = {
+  store: (content, tier, projectId, metadata = {}) =>
+    api.post('/api/memory/store', { content, tier, project_id: projectId, metadata }),
+  search: (query, projectId, tiers = ['semantic', 'episodic'], limit = 10) =>
+    api.post('/api/memory/search', { query, project_id: projectId, tiers, limit }),
+  audit: (tier, projectId) =>
+    api.get(`/api/memory/audit/${tier}`, { params: { project_id: projectId } }),
+  listSemantic: (projectId, limit = 50, offset = 0) =>
+    api.get('/api/memory/semantic', { params: { project_id: projectId, limit, offset } }),
+  deleteSemantic: (docId, projectId) =>
+    api.delete(`/api/memory/semantic/${docId}`, { params: { project_id: projectId } }),
+  listNotes: (projectId) =>
+    api.get('/api/memory/episodic/notes', { params: { project_id: projectId } }),
+  updateNote: (noteId, content) =>
+    api.put(`/api/memory/episodic/notes/${noteId}`, { content }),
+  deleteNote: (noteId) =>
+    api.delete(`/api/memory/episodic/notes/${noteId}`),
+  deleteMessage: (messageId) =>
+    api.delete(`/api/memory/episodic/messages/${messageId}`),
+  listGraphNodes: (projectId, nodeType) =>
+    api.get('/api/memory/graph/nodes', { params: { project_id: projectId, node_type: nodeType } }),
+  listGraphEdges: (projectId) =>
+    api.get('/api/memory/graph/edges', { params: { project_id: projectId } }),
+  createGraphNode: (nodeType, label, projectId, metadata = {}) =>
+    api.post('/api/memory/graph/nodes', { node_type: nodeType, label, project_id: projectId, metadata }),
+  createGraphEdge: (labelA, labelB, relationship, projectId) =>
+    api.post('/api/memory/graph/edges', { label_a: labelA, label_b: labelB, relationship, project_id: projectId }),
+  deleteGraphNode: (nodeId, projectId) =>
+    api.delete(`/api/memory/graph/nodes/${nodeId}`, { params: { project_id: projectId } }),
+  deleteGraphEdge: (edgeId, projectId) =>
+    api.delete(`/api/memory/graph/edges/${edgeId}`, { params: { project_id: projectId } }),
+  consolidate: (projectId, sessionId) =>
+    api.post('/api/memory/consolidate', null, { params: { project_id: projectId, session_id: sessionId } }),
+}
+
+// Files API
+export const filesApi = {
+  list: (projectId, path = '') =>
+    api.get('/api/files', { params: { project_id: projectId, path } }),
+  read: (path, projectId) =>
+    api.get('/api/files/read', { params: { path, project_id: projectId } }),
+  upload: (file, projectId, path = '') => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/api/files/upload', formData, {
+      params: { project_id: projectId, path },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  delete: (path, projectId) =>
+    api.delete('/api/files', { params: { path, project_id: projectId } }),
+  mkdir: (path, projectId) =>
+    api.post('/api/files/mkdir', null, { params: { path, project_id: projectId } }),
+  downloadUrl: (path, projectId) =>
+    `${BASE_URL}/api/files/download?path=${encodeURIComponent(path)}&project_id=${encodeURIComponent(projectId)}`,
+}
+
+// Settings API
+export const settingsApi = {
+  get: () => api.get('/api/settings'),
+  update: (data) => api.put('/api/settings', data),
+  listModels: () => api.get('/api/settings/models'),
+  testConnection: () => api.get('/api/settings/test-connection'),
+  listSecrets: () => api.get('/api/secrets'),
+  setSecret: (key, value) => api.put(`/api/secrets/${key}`, { value }),
+  deleteSecret: (key) => api.delete(`/api/secrets/${key}`),
+}
+
+// Tasks API
+export const tasksApi = {
+  list: (projectId) => api.get('/api/tasks', { params: { project_id: projectId } }),
+  create: (name, description, schedule, projectId) =>
+    api.post('/api/tasks', { name, description, schedule, project_id: projectId }),
+  cancel: (taskId) => api.delete(`/api/tasks/${taskId}`),
+  getLogs: (taskId, projectId) =>
+    api.get(`/api/tasks/${taskId}/logs`, { params: { project_id: projectId } }),
+  getAllLogs: (projectId) =>
+    api.get('/api/tasks/logs/all', { params: { project_id: projectId } }),
+}
+
+// Personality API
+export const personalityApi = {
+  getSoul: (projectId) => api.get('/api/personality/soul', { params: { project_id: projectId } }),
+  updateSoul: (content, projectId) =>
+    api.put('/api/personality/soul', { content }, { params: { project_id: projectId } }),
+  getAgent: (projectId) => api.get('/api/personality/agent', { params: { project_id: projectId } }),
+  updateAgent: (content, projectId) =>
+    api.put('/api/personality/agent', { content }, { params: { project_id: projectId } }),
+}
+
+// Projects API
+export const projectsApi = {
+  list: () => api.get('/api/projects'),
+  create: (name, description, id) => api.post('/api/projects', { name, description, id }),
+  get: (projectId) => api.get(`/api/projects/${projectId}`),
+  update: (projectId, name, description) =>
+    api.put(`/api/projects/${projectId}`, { name, description }),
+  delete: (projectId) => api.delete(`/api/projects/${projectId}`),
+}
+
+// WebSocket helper
+export function createChatSocket(onMessage) {
+  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/chat`
+  const socket = new WebSocket(wsUrl)
+  socket.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      onMessage(data)
+    } catch (e) {
+      console.error('WS parse error:', e)
+    }
+  }
+  socket.onerror = (err) => console.error('WebSocket error:', err)
+  return socket
+}
