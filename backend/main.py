@@ -1,14 +1,17 @@
 """FastAPI application entry point."""
 from __future__ import annotations
+import hmac
 import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from config import get_settings
+from api.auth import router as auth_router, compute_token
 from api.chat import router as chat_router, websocket_chat
 from api.files import router as files_router
 from api.memory import router as memory_router
@@ -24,6 +27,17 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Routes that are always public (no auth token required)
+_PUBLIC_PATHS = {
+    "/",
+    "/health",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/api/auth/login",
+    "/api/auth/config",
+}
 
 
 @asynccontextmanager
@@ -52,11 +66,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Agent Harness",
     description="A production-ready agentic AI framework with 5-tier memory, project isolation, and autonomous tasks.",
-    version="1.0.0",
+    version="2026-04-01-01",
     lifespan=lifespan,
 )
 
-# CORS
+# ── CORS (must be added before auth middleware) ───────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -65,7 +79,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ── Auth middleware ───────────────────────────────────────────────────────────
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Gate all non-public routes behind AUTH_PASSWORD when it is set."""
+    cfg = get_settings()
+
+    # Auth disabled — pass everything through
+    if not cfg.auth_password:
+        return await call_next(request)
+
+    # Always allow public paths
+    if request.url.path in _PUBLIC_PATHS:
+        return await call_next(request)
+
+    # WebSocket connections carry the token as a query parameter because
+    # the WebSocket API does not support arbitrary headers.
+    if request.url.path.startswith("/ws/"):
+        token = request.query_params.get("token", "")
+    else:
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.removeprefix("Bearer ").strip()
+
+    expected = compute_token(cfg.auth_password, cfg.secret_key)
+    try:
+        valid = hmac.compare_digest(token, expected)
+    except (TypeError, ValueError):
+        valid = False
+
+    if not valid:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    return await call_next(request)
+
+
 # ── API routers ───────────────────────────────────────────────────────────────
+app.include_router(auth_router,        prefix="/api", tags=["auth"])
 app.include_router(chat_router,        prefix="/api", tags=["chat"])
 app.include_router(files_router,       prefix="/api", tags=["files"])
 app.include_router(memory_router,      prefix="/api", tags=["memory"])
@@ -82,7 +132,7 @@ app.websocket("/ws/chat")(websocket_chat)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": "2026-04-01-01"}
 
 
 @app.get("/")

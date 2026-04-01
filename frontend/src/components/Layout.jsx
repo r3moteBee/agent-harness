@@ -2,7 +2,7 @@ import React from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
   MessageSquare, Brain, FolderOpen, User, Settings,
-  ListTodo, Briefcase, Menu, X, Bot, ChevronDown
+  ListTodo, Briefcase, Menu, X, Bot, ChevronDown, LogOut
 } from 'lucide-react'
 import { useStore } from '../store'
 
@@ -91,8 +91,18 @@ export default function Layout() {
         </nav>
 
         {/* Footer */}
-        <div className="p-3 border-t border-gray-800">
-          <p className="text-xs text-gray-600 text-center">v1.0.0</p>
+        <div className="p-3 border-t border-gray-800 space-y-2">
+          <button
+            onClick={() => {
+              localStorage.removeItem('auth_token')
+              window.dispatchEvent(new Event('auth:logout'))
+            }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
+          >
+            <LogOut className="w-3 h-3" />
+            Sign out
+          </button>
+          <p className="text-xs text-gray-700 text-center">2026-04-01-01</p>
         </div>
       </aside>
 

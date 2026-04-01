@@ -21,8 +21,9 @@ LLM_MODEL="${LLM_MODEL:-gpt-4o}"
 BRANCH="main"
 SKIP_CONFIRM=false
 MODE=""   # "local" or "docker" — prompted if not set
-DOMAIN=""      # domain for HTTPS via Caddy — prompted if not set
-AGENT_NAME=""  # agent name written into soul.md — prompted if not set
+DOMAIN=""         # domain for HTTPS via Caddy — prompted if not set
+AGENT_NAME=""     # agent name written into soul.md — prompted if not set
+AUTH_PASSWORD=""  # web interface password — prompted if not set
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -46,7 +47,8 @@ while [[ $# -gt 0 ]]; do
     --branch)     BRANCH="$2";         shift 2 ;;
     --mode)       MODE="$2";           shift 2 ;;
     --domain)     DOMAIN="$2";         shift 2 ;;
-    --agent-name) AGENT_NAME="$2";     shift 2 ;;
+    --agent-name)    AGENT_NAME="$2";     shift 2 ;;
+    --auth-password) AUTH_PASSWORD="$2";  shift 2 ;;
     --yes|-y)     SKIP_CONFIRM=true;   shift ;;
     --help|-h)
       echo "Usage: deploy.sh [options]"
@@ -60,7 +62,8 @@ while [[ $# -gt 0 ]]; do
       echo "  --base-url URL   LLM provider base URL (default: OpenAI)"
       echo "  --branch NAME    Git branch to deploy (default: main)"
       echo "  --domain DOMAIN      Domain name for HTTPS via Caddy (e.g. agent.example.com)"
-      echo "  --agent-name NAME    Name for the agent (default: Pan)"
+      echo "  --agent-name NAME        Name for the agent (default: Pan)"
+      echo "  --auth-password PASS     Web interface password (prompted if omitted)"
       echo "  --yes, -y            Skip confirmation and model selection prompts"
       echo ""
       echo "When run interactively (without --yes), the installer will:"
@@ -81,7 +84,7 @@ done
 echo -e "${BOLD}"
 echo "  ╔═══════════════════════════════════════════╗"
 echo "  ║        Agent Harness  Installer           ║"
-echo "  ║   Self-hosted AI Agent Framework v1.0.0   ║"
+echo "  ║  Self-hosted AI Agent Framework 2026-04-01 ║"
 echo "  ╚═══════════════════════════════════════════╝"
 echo -e "${RESET}"
 
@@ -549,6 +552,39 @@ else
   # Just copy as-is if name unchanged
   cp "$SOUL_SRC" "$SOUL_DEST"
   success "Agent personality copied (name: ${AGENT_NAME})"
+fi
+
+# ── Web interface password ────────────────────────────────────────────────────
+CURRENT_AUTH_PW=$(grep "^AUTH_PASSWORD=" .env 2>/dev/null | cut -d= -f2- || true)
+
+if [[ "$SKIP_CONFIRM" == false ]]; then
+  echo ""
+  header "Web Interface Security"
+  echo ""
+  echo "  Set a password to protect the web interface from unauthorized access."
+  echo "  This is strongly recommended if the server is publicly reachable."
+  echo "  Leave blank to disable authentication."
+  echo ""
+  if [[ -n "$CURRENT_AUTH_PW" ]]; then
+    read -rsp "  Password [leave blank to keep existing]: " input_auth_pw </dev/tty
+    echo ""
+  else
+    read -rsp "  Password (Enter to skip): " input_auth_pw </dev/tty
+    echo ""
+  fi
+  if [[ -n "$input_auth_pw" ]]; then
+    AUTH_PASSWORD="$input_auth_pw"
+  elif [[ -z "$input_auth_pw" && -n "$CURRENT_AUTH_PW" ]]; then
+    AUTH_PASSWORD="$CURRENT_AUTH_PW"
+  fi
+fi
+
+if [[ -n "$AUTH_PASSWORD" ]]; then
+  update_env "AUTH_PASSWORD" "$AUTH_PASSWORD"
+  success "Web interface password set"
+else
+  update_env "AUTH_PASSWORD" ""
+  warn "No password set — web interface is open to anyone who can reach this server"
 fi
 
 # =============================================================================

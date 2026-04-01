@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # Security
     vault_master_key: str = Field(default="dev-key-change-in-production-32x", env="VAULT_MASTER_KEY")
     secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
+    # Set AUTH_PASSWORD to require a password on the web interface.
+    # Leave empty to disable authentication (not recommended on public servers).
+    auth_password: str = Field(default="", env="AUTH_PASSWORD")
 
     # Telegram
     telegram_bot_token: str = Field(default="", env="TELEGRAM_BOT_TOKEN")

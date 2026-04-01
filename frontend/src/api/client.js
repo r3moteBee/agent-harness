@@ -8,14 +8,34 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Response interceptor for error handling
+// Request interceptor — attach auth token if present
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token')
+  if (token && token !== 'no-auth') {
+    config.headers['Authorization'] = `Bearer ${token}`
+  }
+  return config
+})
+
+// Response interceptor — handle errors and 401 redirects
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('auth_token')
+      window.dispatchEvent(new Event('auth:logout'))
+    }
     const message = error.response?.data?.detail || error.message || 'Request failed'
     return Promise.reject(new Error(message))
   }
 )
+
+// Auth API
+export const authApi = {
+  config: () => fetch('/api/auth/config').then((r) => r.json()),
+  login: (password) =>
+    api.post('/api/auth/login', { password }),
+}
 
 // Chat API
 export const chatApi = {
@@ -130,7 +150,10 @@ export const projectsApi = {
 
 // WebSocket helper
 export function createChatSocket(onMessage) {
-  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/chat`
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const token = localStorage.getItem('auth_token') || ''
+  const tokenParam = token && token !== 'no-auth' ? `?token=${encodeURIComponent(token)}` : ''
+  const wsUrl = `${proto}//${window.location.host}/ws/chat${tokenParam}`
   const socket = new WebSocket(wsUrl)
   socket.onmessage = (event) => {
     try {
