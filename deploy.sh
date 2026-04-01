@@ -21,7 +21,8 @@ LLM_MODEL="${LLM_MODEL:-gpt-4o}"
 BRANCH="main"
 SKIP_CONFIRM=false
 MODE=""   # "local" or "docker" — prompted if not set
-DOMAIN="" # domain for HTTPS via Caddy — prompted if not set
+DOMAIN=""      # domain for HTTPS via Caddy — prompted if not set
+AGENT_NAME=""  # agent name written into soul.md — prompted if not set
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -45,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --branch)     BRANCH="$2";         shift 2 ;;
     --mode)       MODE="$2";           shift 2 ;;
     --domain)     DOMAIN="$2";         shift 2 ;;
+    --agent-name) AGENT_NAME="$2";     shift 2 ;;
     --yes|-y)     SKIP_CONFIRM=true;   shift ;;
     --help|-h)
       echo "Usage: deploy.sh [options]"
@@ -57,8 +59,9 @@ while [[ $# -gt 0 ]]; do
       echo "  --model MODEL    LLM model name (default: gpt-4o)"
       echo "  --base-url URL   LLM provider base URL (default: OpenAI)"
       echo "  --branch NAME    Git branch to deploy (default: main)"
-      echo "  --domain DOMAIN  Domain name for HTTPS via Caddy (e.g. agent.example.com)"
-      echo "  --yes, -y        Skip confirmation and model selection prompts"
+      echo "  --domain DOMAIN      Domain name for HTTPS via Caddy (e.g. agent.example.com)"
+      echo "  --agent-name NAME    Name for the agent (default: Hermes)"
+      echo "  --yes, -y            Skip confirmation and model selection prompts"
       echo ""
       echo "When run interactively (without --yes), the installer will:"
       echo "  1. Ask for your LLM endpoint URL and API key"
@@ -514,6 +517,39 @@ fi
 header "Preparing data directories..."
 mkdir -p data/db data/chroma data/personality data/projects data/workspace
 success "Data directories ready"
+
+# ── Agent name ────────────────────────────────────────────────────────────────
+SOUL_SRC="$INSTALL_DIR/backend/data/personality/soul.md"
+SOUL_DEST="$INSTALL_DIR/data/personality/soul.md"
+
+# Detect the current name baked into soul.md (default: Hermes)
+CURRENT_AGENT_NAME=$(grep -o "^You are [A-Za-z0-9_-]*" "$SOUL_SRC" 2>/dev/null | awk '{print $3}' || echo "Hermes")
+
+if [[ "$SKIP_CONFIRM" == false ]]; then
+  echo ""
+  header "Agent Identity"
+  echo ""
+  echo "  Your agent introduces itself by name. You can choose any name you like."
+  echo "  Leave blank to keep the default."
+  echo ""
+  read -rp "  Agent name [${CURRENT_AGENT_NAME}]: " input_agent_name </dev/tty
+  AGENT_NAME="${input_agent_name:-$CURRENT_AGENT_NAME}"
+else
+  AGENT_NAME="${AGENT_NAME:-$CURRENT_AGENT_NAME}"
+fi
+
+# Write soul.md to the data directory, replacing the name throughout
+if [[ "$AGENT_NAME" != "$CURRENT_AGENT_NAME" ]]; then
+  # Escape special chars for sed
+  OLD_ESC=$(printf '%s\n' "$CURRENT_AGENT_NAME" | sed 's/[\/&]/\\&/g')
+  NEW_ESC=$(printf '%s\n' "$AGENT_NAME"          | sed 's/[\/&]/\\&/g')
+  sed "s/${OLD_ESC}/${NEW_ESC}/g" "$SOUL_SRC" > "$SOUL_DEST"
+  success "Agent named \"${AGENT_NAME}\" (soul.md written to data/personality/)"
+else
+  # Just copy as-is if name unchanged
+  cp "$SOUL_SRC" "$SOUL_DEST"
+  success "Agent personality copied (name: ${AGENT_NAME})"
+fi
 
 # =============================================================================
 # ── DOCKER MODE ───────────────────────────────────────────────────────────────
