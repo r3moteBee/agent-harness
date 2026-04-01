@@ -28,7 +28,7 @@ class PersonalityUpdate(BaseModel):
 @router.get("/personality/soul")
 async def get_soul(
     project_id: str | None = Query(default=None),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Get soul.md content (global or project-specific)."""
     if project_id:
         overrides = load_project_personality(project_id)
