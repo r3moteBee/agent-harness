@@ -30,6 +30,17 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
     cors_origins: str = Field(default="http://localhost:3000,http://localhost:5173,http://localhost:80", env="CORS_ORIGINS")
 
+    # Search
+    # URL of a search backend (SearXNG, Brave, or any OpenSearch-compatible JSON API).
+    # Leave empty to fall back to DuckDuckGo HTML scraping.
+    # Examples:
+    #   SearXNG:  http://localhost:8080
+    #   Brave:    https://api.search.brave.com/res/v1/web
+    search_url: str = Field(default="", env="SEARCH_URL")
+    # Optional API key — sent as  X-Subscription-Token  (Brave)
+    # or  Authorization: Bearer  header depending on backend.
+    search_api_key: str = Field(default="", env="SEARCH_API_KEY")
+
     # ChromaDB
     chroma_host: str = Field(default="localhost", env="CHROMA_HOST")
     chroma_port: int = Field(default=8001, env="CHROMA_PORT")

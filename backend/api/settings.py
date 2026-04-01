@@ -20,6 +20,8 @@ class SettingsUpdate(BaseModel):
     llm_api_key: str | None = None
     llm_model: str | None = None
     embedding_model: str | None = None
+    search_url: str | None = None
+    search_api_key: str | None = None
 
 
 class SecretUpdate(BaseModel):
@@ -36,6 +38,8 @@ def _get_effective_settings() -> dict[str, Any]:
         "llm_base_url": vault.get_secret("llm_base_url") or settings_config.llm_base_url,
         "llm_model": vault.get_secret("llm_model") or settings_config.llm_model,
         "embedding_model": vault.get_secret("embedding_model") or settings_config.embedding_model,
+        "search_url": vault.get_secret("search_url") or settings_config.search_url,
+        "search_api_key_set": bool(vault.get_secret("search_api_key") or settings_config.search_api_key),
         "chroma_host": settings_config.chroma_host,
         "chroma_port": settings_config.chroma_port,
         "telegram_configured": bool(settings_config.telegram_bot_token),
@@ -61,6 +65,10 @@ async def update_settings(req: SettingsUpdate) -> dict[str, Any]:
         vault.set_secret("llm_model", req.llm_model)
     if req.embedding_model is not None:
         vault.set_secret("embedding_model", req.embedding_model)
+    if req.search_url is not None:
+        vault.set_secret("search_url", req.search_url)
+    if req.search_api_key is not None:
+        vault.set_secret("search_api_key", req.search_api_key)
 
     # Reset provider so it picks up new settings
     reset_provider()

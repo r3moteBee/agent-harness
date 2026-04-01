@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Save, Eye, EyeOff, Trash2, Plus, Check, X, RefreshCw } from 'lucide-react'
+import { Save, Eye, EyeOff, Trash2, Plus, Check, X, RefreshCw, Search } from 'lucide-react'
 import { useStore } from '../store'
 import { settingsApi } from '../api/client'
 
@@ -155,6 +155,117 @@ function LLMSection() {
   )
 }
 
+function SearchSection() {
+  const [searchUrl, setSearchUrl] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [apiKeySet, setApiKeySet] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const addNotification = useStore((s) => s.addNotification)
+
+  useEffect(() => {
+    settingsApi.get().then((res) => {
+      setSearchUrl(res.data.search_url || '')
+      setApiKeySet(res.data.search_api_key_set || false)
+    }).catch(() => {})
+  }, [])
+
+  const save = async () => {
+    setLoading(true)
+    try {
+      const payload = { search_url: searchUrl }
+      if (apiKey) payload.search_api_key = apiKey
+      await settingsApi.update(payload)
+      if (apiKey) setApiKeySet(true)
+      addNotification({ type: 'success', message: 'Search settings saved' })
+    } catch (err) {
+      addNotification({ type: 'error', message: err.message })
+    }
+    setLoading(false)
+  }
+
+  const PRESETS = [
+    { label: 'SearXNG (local)',  value: 'http://localhost:8080' },
+    { label: 'Brave Search API', value: 'https://api.search.brave.com/res/v1/web/search' },
+    { label: 'DuckDuckGo (default)', value: '' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Search className="w-4 h-4 text-gray-400" />
+        <h3 className="text-sm font-semibold text-gray-200">Web Search</h3>
+      </div>
+
+      <p className="text-xs text-gray-500">
+        Configure the backend the agent uses for <code className="text-gray-400">web_search</code> calls.
+        Leave blank to use DuckDuckGo (no key required).
+      </p>
+
+      {/* Quick presets */}
+      <div className="flex flex-wrap gap-2">
+        {PRESETS.map((p) => (
+          <button
+            key={p.label}
+            onClick={() => setSearchUrl(p.value)}
+            className={`px-2 py-1 rounded text-xs border transition-colors ${
+              searchUrl === p.value
+                ? 'bg-brand-600 border-brand-500 text-white'
+                : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-2">Search URL</label>
+        <input
+          type="text"
+          value={searchUrl}
+          onChange={(e) => setSearchUrl(e.target.value)}
+          placeholder="http://localhost:8080  (blank = DuckDuckGo)"
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-2">
+          API Key
+          {apiKeySet && !apiKey && (
+            <span className="ml-2 text-green-500 font-normal">✓ key saved</span>
+          )}
+        </label>
+        <div className="flex gap-2">
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={apiKeySet ? '(leave blank to keep existing)' : 'Optional — required for Brave Search'}
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+          />
+          <button
+            onClick={() => setShowKey(!showKey)}
+            className="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-400"
+          >
+            {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      <button
+        onClick={save}
+        disabled={loading}
+        className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg disabled:opacity-50"
+      >
+        <Save className="w-4 h-4" />
+        Save Search Settings
+      </button>
+    </div>
+  )
+}
+
 function SecretsSection() {
   const [secrets, setSecrets] = useState([])
   const [newKey, setNewKey] = useState('')
@@ -287,6 +398,8 @@ export default function Settings() {
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         <div className="max-w-2xl mx-auto p-6 space-y-8">
           <LLMSection />
+          <div className="border-t border-gray-800" />
+          <SearchSection />
           <div className="border-t border-gray-800" />
           <SecretsSection />
         </div>
