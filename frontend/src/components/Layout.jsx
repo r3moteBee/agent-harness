@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
   MessageSquare, Brain, FolderOpen, User, Settings,
-  ListTodo, Briefcase, Menu, X, Bot, ChevronDown, LogOut
+  ListTodo, Briefcase, Menu, X, Bot, ChevronDown, LogOut, Check
 } from 'lucide-react'
 import { useStore } from '../store'
+import { projectsApi } from '../api/client'
 
 const NAV_ITEMS = [
   { to: '/chat', icon: MessageSquare, label: 'Chat' },
@@ -16,13 +17,46 @@ const NAV_ITEMS = [
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
+const DEFAULT_PROJECT = { id: 'default', name: 'Default Project' }
+
 export default function Layout() {
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const setSidebarOpen = useStore((s) => s.setSidebarOpen)
   const activeProject = useStore((s) => s.activeProject)
+  const setActiveProject = useStore((s) => s.setActiveProject)
+  const projects = useStore((s) => s.projects)
+  const setProjects = useStore((s) => s.setProjects)
   const notifications = useStore((s) => s.notifications)
   const removeNotification = useStore((s) => s.removeNotification)
+
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false)
+  const projectMenuRef = useRef(null)
+
+  // Load project list once on mount
+  useEffect(() => {
+    projectsApi.list().then(res => {
+      setProjects(res.data.projects || [])
+    }).catch(() => {})
+  }, [])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e) => {
+      if (projectMenuRef.current && !projectMenuRef.current.contains(e.target)) {
+        setProjectMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const allProjects = [DEFAULT_PROJECT, ...projects.filter(p => p.id !== 'default')]
+
+  const selectProject = (project) => {
+    setActiveProject(project)
+    setProjectMenuOpen(false)
+  }
 
   return (
     <div className="flex h-screen bg-gray-950 overflow-hidden">
@@ -60,12 +94,35 @@ export default function Layout() {
           </button>
         </div>
 
-        {/* Active project indicator */}
-        <div className="px-3 py-2 border-b border-gray-800">
-          <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-gray-800 text-xs">
+        {/* Project switcher */}
+        <div className="px-3 py-2 border-b border-gray-800" ref={projectMenuRef}>
+          <button
+            onClick={() => setProjectMenuOpen(o => !o)}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md bg-gray-800 hover:bg-gray-750 text-xs transition-colors group"
+          >
             <div className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
-            <span className="text-gray-300 truncate">{activeProject?.name || 'Default Project'}</span>
-          </div>
+            <span className="text-gray-300 truncate flex-1 text-left">
+              {activeProject?.name || 'Default Project'}
+            </span>
+            <ChevronDown className={`w-3 h-3 text-gray-500 flex-shrink-0 transition-transform ${projectMenuOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {projectMenuOpen && (
+            <div className="mt-1 rounded-md border border-gray-700 bg-gray-900 shadow-lg overflow-hidden">
+              {allProjects.map(project => (
+                <button
+                  key={project.id}
+                  onClick={() => selectProject(project)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-gray-800 transition-colors text-left"
+                >
+                  <Check className={`w-3 h-3 flex-shrink-0 ${activeProject?.id === project.id ? 'text-brand-400' : 'text-transparent'}`} />
+                  <span className={`truncate ${activeProject?.id === project.id ? 'text-white font-medium' : 'text-gray-400'}`}>
+                    {project.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Navigation */}
@@ -102,7 +159,7 @@ export default function Layout() {
             <LogOut className="w-3 h-3" />
             Sign out
           </button>
-          <p className="text-xs text-gray-700 text-center">2026-04-01-03</p>
+          <p className="text-xs text-gray-700 text-center">2026-04-01-04</p>
         </div>
       </aside>
 
