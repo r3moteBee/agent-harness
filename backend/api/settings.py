@@ -1,5 +1,6 @@
 """Settings API — model config, endpoint management, secrets."""
 from __future__ import annotations
+import asyncio
 import logging
 from typing import Any
 
@@ -7,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from config import get_settings
-from models.provider import get_provider, reset_provider
+from models.provider import get_provider, get_embedding_provider, get_prefill_provider, get_reranker_provider, reset_provider
 from secrets.vault import get_vault
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,9 @@ class SettingsUpdate(BaseModel):
     embedding_model: str | None = None
     embedding_base_url: str | None = None
     embedding_api_key: str | None = None
+    reranker_model: str | None = None
+    reranker_base_url: str | None = None
+    reranker_api_key: str | None = None
     search_url: str | None = None
     search_api_key: str | None = None
     telegram_bot_token: str | None = None
@@ -53,6 +57,9 @@ def _get_effective_settings() -> dict[str, Any]:
         "embedding_model": vault.get_secret("embedding_model") or settings_config.embedding_model,
         "embedding_base_url": vault.get_secret("embedding_base_url") or settings_config.embedding_base_url,
         "embedding_api_key_set": bool(vault.get_secret("embedding_api_key") or settings_config.embedding_api_key),
+        "reranker_model": vault.get_secret("reranker_model") or settings_config.reranker_model,
+        "reranker_base_url": vault.get_secret("reranker_base_url") or settings_config.reranker_base_url,
+        "reranker_api_key_set": bool(vault.get_secret("reranker_api_key") or settings_config.reranker_api_key),
         "search_url": vault.get_secret("search_url") or settings_config.search_url,
         "search_api_key_set": bool(vault.get_secret("search_api_key") or settings_config.search_api_key),
         "chroma_host": settings_config.chroma_host,
@@ -101,6 +108,12 @@ async def update_settings(req: SettingsUpdate) -> dict[str, Any]:
         vault.set_secret("embedding_base_url", req.embedding_base_url)
     if req.embedding_api_key is not None:
         vault.set_secret("embedding_api_key", req.embedding_api_key)
+    if req.reranker_model is not None:
+        vault.set_secret("reranker_model", req.reranker_model)
+    if req.reranker_base_url is not None:
+        vault.set_secret("reranker_base_url", req.reranker_base_url)
+    if req.reranker_api_key is not None:
+        vault.set_secret("reranker_api_key", req.reranker_api_key)
     if req.search_url is not None:
         vault.set_secret("search_url", req.search_url)
     if req.search_api_key is not None:
@@ -134,18 +147,41 @@ async def list_models() -> dict[str, Any]:
 
 @router.get("/settings/test-connection")
 async def test_connection() -> dict[str, Any]:
-    """Test the connection to the LLM provider."""
-    provider = get_provider()
-    try:
-        models = await provider.list_models()
-        return {
-            "status": "ok",
-            "base_url": provider.base_url,
-            "model": provider.model,
-            "available_models": len(models),
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e), "base_url": provider.base_url}
+    """Test the connection to all configured providers."""
+
+    async def _test_provider(name: str, prov: ModelProvider | None) -> dict[str, Any]:
+        if prov is None:
+            return {"name": name, "status": "not_configured"}
+        try:
+            models = await prov.list_models()
+            return {
+                "name": name,
+                "status": "ok",
+                "base_url": prov.base_url,
+                "model": prov.model,
+                "available_models": len(models),
+            }
+        except Exception as e:
+            return {"name": name, "status": "error", "message": str(e), "base_url": prov.base_url}
+
+    primary = get_provider()
+    embedding = get_embedding_provider()
+    prefill = get_prefill_provider()
+    reranker = get_reranker_provider()
+
+    results = await asyncio.gather(
+        _test_provider("primary", primary),
+        _test_provider("embedding", embedding),
+        _test_provider("prefill", prefill),
+        _test_provider("reranker", reranker),
+    )
+
+    providers = {r["name"]: r for r in results}
+    all_ok = all(r["status"] in ("ok", "not_configured") for r in results)
+    return {
+        "status": "ok" if all_ok else "partial",
+        "providers": providers,
+    }
 
 
 @router.post("/settings/restart-telegram")

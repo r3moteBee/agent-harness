@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     embedding_base_url: str = Field(default="", env="EMBEDDING_BASE_URL")
     embedding_api_key: str = Field(default="", env="EMBEDDING_API_KEY")
 
+    # Reranker — cross-encoder model for memory recall reranking
+    reranker_model: str = Field(default="", env="RERANKER_MODEL")
+    reranker_base_url: str = Field(default="", env="RERANKER_BASE_URL")
+    reranker_api_key: str = Field(default="", env="RERANKER_API_KEY")
+
     # Security
     vault_master_key: str = Field(default="dev-key-change-in-production-32x", env="VAULT_MASTER_KEY")
     secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")

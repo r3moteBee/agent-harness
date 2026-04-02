@@ -239,6 +239,7 @@ class ModelProvider:
 _provider_instance: ModelProvider | None = None
 _embedding_provider_instance: ModelProvider | None = None
 _prefill_provider_instance: ModelProvider | None = None
+_reranker_provider_instance: ModelProvider | None = None
 
 
 def _vault_or(key: str, fallback: str = "") -> str | None:
@@ -317,9 +318,36 @@ def get_prefill_provider() -> ModelProvider:
     return _prefill_provider_instance
 
 
+def get_reranker_provider() -> ModelProvider | None:
+    """Get the singleton reranker provider.
+
+    Returns None when no reranker is configured (model + base_url both blank).
+    """
+    global _reranker_provider_instance
+    if _reranker_provider_instance is None:
+        rr_base = _vault_or("reranker_base_url") or settings.reranker_base_url or None
+        rr_key = _vault_or("reranker_api_key") or settings.reranker_api_key or None
+        rr_model = _vault_or("reranker_model") or settings.reranker_model or None
+
+        if not rr_base and not rr_model:
+            return None  # Not configured
+
+        primary = get_provider()
+        _reranker_provider_instance = ModelProvider(
+            base_url=rr_base or primary.base_url,
+            api_key=rr_key or primary.api_key,
+            model=rr_model or "reranker",
+            embedding_model=primary.embedding_model,
+        )
+        if rr_base:
+            logger.info("Reranker provider configured at %s (model: %s)", rr_base, rr_model)
+    return _reranker_provider_instance
+
+
 def reset_provider() -> None:
     """Reset all provider singletons (call after settings change)."""
-    global _provider_instance, _embedding_provider_instance, _prefill_provider_instance
+    global _provider_instance, _embedding_provider_instance, _prefill_provider_instance, _reranker_provider_instance
     _provider_instance = None
     _embedding_provider_instance = None
     _prefill_provider_instance = None
+    _reranker_provider_instance = None
