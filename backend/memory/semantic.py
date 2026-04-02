@@ -123,10 +123,17 @@ class SemanticMemory:
             if count == 0:
                 return []
             kwargs: dict[str, Any] = {
-                "query_texts": [query],
                 "n_results": min(n, count),
                 "include": ["documents", "metadatas", "distances"],
             }
+            # Use custom embedding fn so search matches the model used at store time
+            if self._embedding_fn:
+                logger.debug("Embedding query with custom model for semantic search")
+                query_embedding = await self._embedding_fn(query)
+                kwargs["query_embeddings"] = [query_embedding]
+            else:
+                # Fall back to ChromaDB's default embedding
+                kwargs["query_texts"] = [query]
             if where:
                 kwargs["where"] = where
 

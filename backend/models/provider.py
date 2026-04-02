@@ -220,11 +220,14 @@ class ModelProvider:
         """Get embedding for text."""
         url = f"{self.base_url}/embeddings"
         payload = {"model": self.embedding_model, "input": text}
+        logger.debug("Embedding request → %s (model: %s, %d chars)", url, self.embedding_model, len(text))
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(url, headers=self._headers(), json=payload)
                 resp.raise_for_status()
                 data = resp.json()
+                dims = len(data["data"][0]["embedding"])
+                logger.debug("Embedding response ← %d dimensions", dims)
                 return data["data"][0]["embedding"]
         except Exception as e:
             logger.warning(f"Embedding failed, using zero vector: {e}")

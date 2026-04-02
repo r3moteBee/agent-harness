@@ -159,7 +159,69 @@ class MemoryManager:
 
         # Sort by score descending
         all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+        # Rerank if a reranker provider is configured
+        if all_results:
+            try:
+                from models.provider import get_reranker_provider
+                reranker = get_reranker_provider()
+                if reranker is not None:
+                    all_results = await self._rerank(query, all_results, reranker)
+            except Exception as e:
+                logger.warning("Reranking failed, using original order: %s", e)
+
         return all_results
+
+    async def _rerank(
+        self,
+        query: str,
+        results: list[dict[str, Any]],
+        reranker,
+    ) -> list[dict[str, Any]]:
+        """Rerank results using the reranker provider's /v1/rerank endpoint.
+
+        Falls back to chat-based reranking if the rerank endpoint isn't available.
+        """
+        import httpx
+
+        documents = [r.get("content", "")[:500] for r in results]
+        url = f"{reranker.base_url}/rerank"
+        payload = {
+            "model": reranker.model,
+            "query": query,
+            "documents": documents,
+            "top_n": len(documents),
+        }
+        headers = {"Content-Type": "application/json"}
+        if reranker.api_key and reranker.api_key.lower() not in ("", "none", "ollama"):
+            headers["Authorization"] = f"Bearer {reranker.api_key}"
+
+        logger.info("Reranking %d results with model %s", len(documents), reranker.model)
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+
+            # Standard rerank response: {"results": [{"index": 0, "relevance_score": 0.95}, ...]}
+            ranked = data.get("results", [])
+            if ranked:
+                reranked = []
+                for item in sorted(ranked, key=lambda x: x.get("relevance_score", 0), reverse=True):
+                    idx = item.get("index", 0)
+                    if idx < len(results):
+                        entry = results[idx].copy()
+                        entry["score"] = round(item.get("relevance_score", 0), 4)
+                        entry["reranked"] = True
+                        reranked.append(entry)
+                logger.info("Reranking complete — top score: %.4f", reranked[0]["score"] if reranked else 0)
+                return reranked
+        except httpx.HTTPStatusError as e:
+            logger.warning("Rerank endpoint returned %s, skipping rerank", e.response.status_code)
+        except Exception as e:
+            logger.warning("Rerank request failed: %s", e)
+
+        return results
 
     async def audit_memory(
         self,
@@ -222,15 +284,17 @@ class MemoryManager:
 
     async def consolidate_session(self) -> str:
         """Consolidate current session's working memory to semantic/archival.
-        
+
         Call at the end of a session to promote important information.
+        Uses the prefill model for summarisation when available, otherwise
+        falls back to simple concatenation.
         Returns a summary of what was stored.
         """
         messages = self.working.get_messages(as_dicts=True)
         if not messages:
             return "No messages to consolidate."
 
-        # Build a summary text from recent messages
+        # Build raw transcript from recent messages
         summary_lines = []
         for msg in messages[-20:]:  # Last 20 messages
             role = msg.get("role", "unknown")
@@ -241,8 +305,32 @@ class MemoryManager:
         if not summary_lines:
             return "No user/assistant messages to consolidate."
 
-        summary_text = "\n".join(summary_lines)
-        session_summary = f"Session summary (session_id={self.session_id}):\n{summary_text}"
+        raw_transcript = "\n".join(summary_lines)
+
+        # Try to summarise with the prefill model
+        session_summary = None
+        try:
+            from models.provider import get_prefill_provider
+            prefill = get_prefill_provider()
+            logger.info("Using prefill model (%s) for session consolidation", prefill.model)
+            result = await prefill.chat_complete([
+                {"role": "system", "content": (
+                    "You are a memory consolidation assistant. Summarise the following "
+                    "conversation into a concise paragraph highlighting the key facts, "
+                    "decisions, and action items. Omit filler and pleasantries. "
+                    "Write in third person past tense."
+                )},
+                {"role": "user", "content": raw_transcript},
+            ])
+            summary = (result.get("content") or "").strip()
+            if summary:
+                session_summary = f"Session summary (session_id={self.session_id}):\n{summary}"
+                logger.info("Prefill model generated %d-char consolidation summary", len(summary))
+        except Exception as e:
+            logger.warning("Prefill consolidation failed, falling back to raw transcript: %s", e)
+
+        if not session_summary:
+            session_summary = f"Session summary (session_id={self.session_id}):\n{raw_transcript}"
 
         # Store to semantic memory
         doc_id = await self.semantic.store(
