@@ -27,6 +27,8 @@ class SettingsUpdate(BaseModel):
     embedding_api_key: str | None = None
     search_url: str | None = None
     search_api_key: str | None = None
+    telegram_bot_token: str | None = None
+    telegram_allowed_chat_ids: str | None = None
     memory_recall_enabled: bool | None = None
 
 
@@ -55,7 +57,8 @@ def _get_effective_settings() -> dict[str, Any]:
         "search_api_key_set": bool(vault.get_secret("search_api_key") or settings_config.search_api_key),
         "chroma_host": settings_config.chroma_host,
         "chroma_port": settings_config.chroma_port,
-        "telegram_configured": bool(settings_config.telegram_bot_token),
+        "telegram_bot_token_set": bool(vault.get_secret("telegram_bot_token") or settings_config.telegram_bot_token),
+        "telegram_allowed_chat_ids": vault.get_secret("telegram_allowed_chat_ids") or settings_config.telegram_allowed_chat_ids,
         "app_env": settings_config.app_env,
         "memory_recall_enabled": (vault.get_secret("memory_recall_enabled") or "true").lower() == "true",
     }
@@ -102,6 +105,10 @@ async def update_settings(req: SettingsUpdate) -> dict[str, Any]:
         vault.set_secret("search_url", req.search_url)
     if req.search_api_key is not None:
         vault.set_secret("search_api_key", req.search_api_key)
+    if req.telegram_bot_token is not None:
+        vault.set_secret("telegram_bot_token", req.telegram_bot_token)
+    if req.telegram_allowed_chat_ids is not None:
+        vault.set_secret("telegram_allowed_chat_ids", req.telegram_allowed_chat_ids)
     if req.memory_recall_enabled is not None:
         vault.set_secret("memory_recall_enabled", str(req.memory_recall_enabled).lower())
 

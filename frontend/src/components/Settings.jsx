@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Save, Eye, EyeOff, Trash2, Plus, Check, X, RefreshCw, Search, Brain, ChevronDown, ChevronRight } from 'lucide-react'
+import { Save, Eye, EyeOff, Trash2, Plus, Check, X, RefreshCw, Search, Brain, ChevronDown, ChevronRight, MessageCircle } from 'lucide-react'
 import { useStore } from '../store'
 import { settingsApi } from '../api/client'
 
@@ -398,6 +398,99 @@ function SearchSection() {
   )
 }
 
+function TelegramSection() {
+  const [botToken, setBotToken] = useState('')
+  const [chatIds, setChatIds] = useState('')
+  const [tokenSet, setTokenSet] = useState(false)
+  const [showToken, setShowToken] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const addNotification = useStore((s) => s.addNotification)
+
+  useEffect(() => {
+    settingsApi.get().then((res) => {
+      setTokenSet(res.data.telegram_bot_token_set || false)
+      setChatIds(res.data.telegram_allowed_chat_ids || '')
+    }).catch(() => {})
+  }, [])
+
+  const save = async () => {
+    setLoading(true)
+    try {
+      const payload = { telegram_allowed_chat_ids: chatIds }
+      if (botToken) {
+        payload.telegram_bot_token = botToken
+        setTokenSet(true)
+      }
+      await settingsApi.update(payload)
+      setBotToken('')
+      addNotification({ type: 'success', message: 'Telegram settings saved. Restart the server to connect the bot.' })
+    } catch (err) {
+      addNotification({ type: 'error', message: err.message })
+    }
+    setLoading(false)
+  }
+
+  const inputClass = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500'
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <MessageCircle className="w-4 h-4 text-gray-400" />
+        <h3 className="text-sm font-semibold text-gray-200">Telegram Bot</h3>
+      </div>
+
+      <p className="text-xs text-gray-500">
+        Connect a Telegram bot to chat with the agent from your phone.
+        Create a bot via <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">@BotFather</a> to
+        get a token, then message your bot and use <a href="https://api.telegram.org" target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">the Telegram API</a> to
+        find your chat ID. Requires a server restart after saving.
+      </p>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-1.5">
+          Bot Token
+          {tokenSet && !botToken && (
+            <span className="ml-2 text-green-500 font-normal">✓ token saved</span>
+          )}
+        </label>
+        <div className="flex gap-2">
+          <input
+            type={showToken ? 'text' : 'password'}
+            value={botToken}
+            onChange={(e) => setBotToken(e.target.value)}
+            placeholder={tokenSet ? '(leave blank to keep existing token)' : '123456:ABC-DEF1234…'}
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+          />
+          <button onClick={() => setShowToken(!showToken)} className="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-400">
+            {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-1.5">Allowed Chat IDs</label>
+        <input
+          type="text"
+          value={chatIds}
+          onChange={(e) => setChatIds(e.target.value)}
+          placeholder="123456789, 987654321"
+          className={inputClass}
+        />
+        <p className="text-xs text-gray-600 mt-1">Comma-separated list of Telegram chat IDs that can use the bot. Leave blank to allow all.</p>
+      </div>
+
+      <button
+        onClick={save}
+        disabled={loading}
+        className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg disabled:opacity-50"
+      >
+        <Save className="w-4 h-4" />
+        Save Telegram Settings
+      </button>
+    </div>
+  )
+}
+
 function AgentBehaviorSection() {
   const [memoryRecall, setMemoryRecall] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -588,6 +681,8 @@ export default function Settings() {
           <AgentBehaviorSection />
           <div className="border-t border-gray-800" />
           <SearchSection />
+          <div className="border-t border-gray-800" />
+          <TelegramSection />
           <div className="border-t border-gray-800" />
           <SecretsSection />
         </div>
