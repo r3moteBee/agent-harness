@@ -284,7 +284,7 @@ async def execute_tool(
 
         elif tool_name == "send_telegram":
             try:
-                from telegram.bot import send_message_to_all
+                from tgbot.bot import send_message_to_all
                 await send_message_to_all(tool_args["message"])
                 return "Telegram message sent."
             except Exception as e:
