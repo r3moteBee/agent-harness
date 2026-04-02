@@ -8,34 +8,14 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Request interceptor — attach auth token if present
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token')
-  if (token && token !== 'no-auth') {
-    config.headers['Authorization'] = `Bearer ${token}`
-  }
-  return config
-})
-
-// Response interceptor — handle errors and 401 redirects
+// Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token')
-      window.dispatchEvent(new Event('auth:logout'))
-    }
     const message = error.response?.data?.detail || error.message || 'Request failed'
     return Promise.reject(new Error(message))
   }
 )
-
-// Auth API
-export const authApi = {
-  config: () => fetch('/api/auth/config').then((r) => r.json()),
-  login: (password) =>
-    api.post('/api/auth/login', { password }),
-}
 
 // Chat API
 export const chatApi = {
@@ -136,7 +116,6 @@ export const personalityApi = {
   getAgent: (projectId) => api.get('/api/personality/agent', { params: { project_id: projectId } }),
   updateAgent: (content, projectId) =>
     api.put('/api/personality/agent', { content }, { params: { project_id: projectId } }),
-  status: () => api.get('/api/personality/status'),
 }
 
 // Projects API
@@ -150,11 +129,8 @@ export const projectsApi = {
 }
 
 // WebSocket helper
-export function createChatSocket(onMessage, onClose) {
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const token = localStorage.getItem('auth_token') || ''
-  const tokenParam = token && token !== 'no-auth' ? `?token=${encodeURIComponent(token)}` : ''
-  const wsUrl = `${proto}//${window.location.host}/ws/chat${tokenParam}`
+export function createChatSocket(onMessage) {
+  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/chat`
   const socket = new WebSocket(wsUrl)
   socket.onmessage = (event) => {
     try {
@@ -165,11 +141,5 @@ export function createChatSocket(onMessage, onClose) {
     }
   }
   socket.onerror = (err) => console.error('WebSocket error:', err)
-  socket.onclose = (event) => {
-    // Codes 1000 (normal) and 1001 (going away) are expected — anything else is unexpected
-    if (event.code !== 1000 && event.code !== 1001 && onClose) {
-      onClose(event.code, event.reason)
-    }
-  }
   return socket
 }

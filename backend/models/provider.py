@@ -74,6 +74,7 @@ class ModelProvider:
             "model": self.model,
             "messages": messages,
             "stream": True,
+            "max_tokens": 4096,
         }
         if tools:
             payload["tools"] = tools
@@ -82,6 +83,7 @@ class ModelProvider:
         # Accumulate tool call chunks
         tool_call_accum: dict[int, dict[str, Any]] = {}
         current_text = ""
+        finish_reason: str | None = None
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -107,7 +109,13 @@ class ModelProvider:
                         if not choices:
                             continue
                         delta = choices[0].get("delta", {})
-                        finish_reason = choices[0].get("finish_reason")
+                        # Track finish_reason but don't break early — wait for
+                        # [DONE]. Some providers (Gemini, RouteLLM) send
+                        # finish_reason in the same chunk as the last content
+                        # token, so breaking here truncates the response.
+                        chunk_finish = choices[0].get("finish_reason")
+                        if chunk_finish:
+                            finish_reason = chunk_finish
 
                         # Text content
                         content = delta.get("content", "")
@@ -124,14 +132,11 @@ class ModelProvider:
                                     "name": "",
                                     "args_str": "",
                                 }
-                            fn = tc_delta.get("function", {})
-                            if fn.get("name"):
-                                tool_call_accum[idx]["name"] += fn["name"]
-                            if fn.get("arguments"):
-                                tool_call_accum[idx]["args_str"] += fn["arguments"]
-
-                        if finish_reason in ("tool_calls", "stop"):
-                            break
+                            fn_delta = tc_delta.get("function", {})
+                            if fn_delta.get("name"):
+                                tool_call_accum[idx]["name"] += fn_delta["name"]
+                            if fn_delta.get("arguments"):
+                                tool_call_accum[idx]["args_str"] += fn_delta["arguments"]
 
             # Emit completed tool calls
             for idx in sorted(tool_call_accum.keys()):

@@ -146,7 +146,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Search the web for current information. Returns titles, URLs, and snippets for the top results.",
+            "description": "Search the web for information using DuckDuckGo.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -243,7 +243,7 @@ async def execute_tool(
             return "\n".join(entries) if entries else "Empty directory"
 
         elif tool_name == "web_search":
-            return await _web_search(tool_args["query"])
+            return await _ddg_search(tool_args["query"])
 
         elif tool_name == "create_task":
             return f"Task scheduled: {tool_args.get('name', 'task')} - {tool_args['description'][:100]}"
@@ -277,98 +277,8 @@ def _safe_workspace_path(rel_path: str, project_id: str | None = None) -> Path:
     return target
 
 
-async def _web_search(query: str) -> str:
-    """
-    Search the web using the configured backend, falling back to DuckDuckGo.
-
-    Supported backends (set SEARCH_URL / search_url in vault):
-      SearXNG  — http://your-searxng-host          (append /search automatically)
-      Brave    — https://api.search.brave.com/res/v1/web/search
-      Generic  — any URL that accepts ?q=<query>&format=json and returns a JSON
-                 array or {"results": [...]} with title/url/snippet fields.
-
-    SEARCH_API_KEY is sent as:
-      X-Subscription-Token  for Brave
-      Authorization: Bearer  for everything else
-    """
-    from secrets.vault import get_vault  # local import to avoid circular
-
-    cfg = get_settings()
-    vault = get_vault()
-
-    search_url = (vault.get_secret("search_url") or cfg.search_url or "").rstrip("/")
-    api_key    = vault.get_secret("search_api_key") or cfg.search_api_key or ""
-
-    if search_url:
-        return await _configured_search(query, search_url, api_key)
-    return await _ddg_search(query)
-
-
-async def _configured_search(query: str, base_url: str, api_key: str) -> str:
-    """Call a configured JSON search endpoint and parse common response shapes."""
-    headers: dict[str, str] = {
-        "User-Agent": "Mozilla/5.0 (compatible; AgentHarness/1.0)",
-        "Accept": "application/json",
-    }
-    if api_key:
-        # Brave uses X-Subscription-Token; everything else gets Bearer
-        if "brave.com" in base_url:
-            headers["X-Subscription-Token"] = api_key
-        else:
-            headers["Authorization"] = f"Bearer {api_key}"
-
-    # SearXNG expects the path to be /search
-    if "searx" in base_url.lower() and not base_url.endswith("/search"):
-        endpoint = base_url + "/search"
-    else:
-        endpoint = base_url
-
-    params: dict[str, str] = {"q": query, "format": "json"}
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            resp = await client.get(endpoint, params=params, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as e:
-        logger.warning(f"Configured search failed ({base_url}): {e} — falling back to DuckDuckGo")
-        return await _ddg_search(query)
-
-    # ── Normalise the result shape ────────────────────────────────────────────
-    # SearXNG: {"results": [{"title","url","content","engine"}, ...]}
-    # Brave:   {"web": {"results": [{"title","url","description"}, ...]}}
-    # Generic: [{"title","url","snippet"/"description"/"content"}, ...]
-
-    raw: list[dict] = []
-    if isinstance(data, list):
-        raw = data
-    elif isinstance(data, dict):
-        if "results" in data:
-            raw = data["results"]
-        elif "web" in data and isinstance(data["web"], dict):
-            raw = data["web"].get("results", [])
-
-    if not raw:
-        return "No results found."
-
-    lines = []
-    for i, item in enumerate(raw[:6]):
-        title   = item.get("title", "").strip()
-        url_str = item.get("url", item.get("href", "")).strip()
-        snippet = (
-            item.get("content")
-            or item.get("description")
-            or item.get("snippet")
-            or ""
-        ).strip()
-        if title and url_str:
-            lines.append(f"{i+1}. {title}\n   {url_str}\n   {snippet}")
-
-    return "\n\n".join(lines) if lines else "No results found."
-
-
 async def _ddg_search(query: str) -> str:
-    """Fallback: DuckDuckGo via HTML scrape (no API key needed)."""
+    """Simple DuckDuckGo search via their HTML interface."""
     url = "https://html.duckduckgo.com/html/"
     headers = {"User-Agent": "Mozilla/5.0 (compatible; AgentHarness/1.0)"}
     try:
@@ -380,10 +290,10 @@ async def _ddg_search(query: str) -> str:
             snippets = re.findall(r'<a class="result__snippet"[^>]*>(.*?)</a>', resp.text, re.S)
             clean_tag = re.compile(r'<[^>]+>')
             lines = []
-            for i, (link, title) in enumerate(results[:5]):
+            for i, (url, title) in enumerate(results[:5]):
                 clean_title = clean_tag.sub('', title).strip()
                 snippet = clean_tag.sub('', snippets[i]).strip() if i < len(snippets) else ""
-                lines.append(f"{i+1}. {clean_title}\n   {link}\n   {snippet}")
+                lines.append(f"{i+1}. {clean_title}\n   {url}\n   {snippet}")
             return "\n\n".join(lines) if lines else "No results found."
     except Exception as e:
         return f"Search failed: {e}"

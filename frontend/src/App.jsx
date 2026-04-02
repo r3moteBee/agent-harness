@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import ChatPage from './pages/ChatPage'
@@ -8,81 +8,23 @@ import PersonalityPage from './pages/PersonalityPage'
 import SettingsPage from './pages/SettingsPage'
 import TasksPage from './pages/TasksPage'
 import ProjectsPage from './pages/ProjectsPage'
-import LoginPage from './pages/LoginPage'
 import { useStore } from './store'
-import { projectsApi, authApi } from './api/client'
+import { projectsApi } from './api/client'
 
 export default function App() {
   const setProjects = useStore((s) => s.setProjects)
   const setActiveProject = useStore((s) => s.setActiveProject)
 
-  // null = checking, false = needs login, true = authenticated
-  const [authState, setAuthState] = useState(null)
-
-  const initAuth = async () => {
-    try {
-      const { auth_required } = await authApi.config()
-      if (!auth_required) {
-        setAuthState(true)
-        return
-      }
-      const token = localStorage.getItem('auth_token')
-      if (token) {
-        setAuthState(true)
-      } else {
-        setAuthState(false)
-      }
-    } catch {
-      // Can't reach backend yet — show login as safe fallback
-      setAuthState(false)
-    }
-  }
-
   useEffect(() => {
-    initAuth()
-
-    // Listen for 401 responses (from the axios interceptor)
-    const handleLogout = () => setAuthState(false)
-    window.addEventListener('auth:logout', handleLogout)
-    return () => window.removeEventListener('auth:logout', handleLogout)
-  }, [])
-
-  const handleLogin = (token) => {
-    setAuthState(true)
-    // Load projects now that we are authenticated
     projectsApi.list().then((res) => {
       const projects = res.data.projects || []
       setProjects(projects)
-      if (projects.length > 0) setActiveProject(projects[0])
+      if (projects.length > 0) {
+        setActiveProject(projects[0])
+      }
     }).catch(console.error)
-  }
+  }, [])
 
-  // Load projects on first authenticated render
-  useEffect(() => {
-    if (authState === true) {
-      projectsApi.list().then((res) => {
-        const projects = res.data.projects || []
-        setProjects(projects)
-        if (projects.length > 0) setActiveProject(projects[0])
-      }).catch(console.error)
-    }
-  }, [authState])
-
-  // Checking auth
-  if (authState === null) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
-
-  // Not authenticated
-  if (authState === false) {
-    return <LoginPage onLogin={handleLogin} />
-  }
-
-  // Authenticated
   return (
     <BrowserRouter>
       <Routes>

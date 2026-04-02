@@ -69,22 +69,3 @@ Thumbs.db
 .Spotlight-V7
 .Trashes
 ehthumbs.db
-
-# Agent-generated meta files (not part of project)
-BACKEND_*.txt
-BACKEND_*.md
-DELIVERY_CHECKLIST.md
-FILES_CREATED.txt
-backend/BUILD_SUMMARY.txt
-backend/INDEX.md
-backend/QUICK_REFERENCE.md
-backend/BACKEND_BUILD_COMPLETE.md
-backend/memory/INDEX.md
-backend/memory/MANIFEST.md
-backend/memory/QUICK_START.md
-backend/memory/SUMMARY.md
-backend/memory/VERIFICATION_REPORT.txt
-frontend/BUILD_SUMMARY.txt
-frontend/COMPLETION_REPORT.md
-frontend/INDEX.md
-frontend/QUICKSTART.md
