@@ -59,11 +59,28 @@ class AgentCore:
           {"type": "error", "message": "..."}
         """
         try:
+            # Pre-recall relevant memories to inject into system prompt context
+            recalled_memories = None
+            try:
+                from memory.manager import create_memory_manager
+                mgr = create_memory_manager(project_id=self.project_id or "default")
+                results = await mgr.recall(
+                    query=user_message,
+                    tiers=["semantic", "episodic"],
+                    project_id=self.project_id or "default",
+                    limit_per_tier=5,
+                )
+                if results:
+                    recalled_memories = results
+                    logger.debug("Pre-recalled %d memories for context", len(results))
+            except Exception as e:
+                logger.warning("Failed to pre-recall memories: %s", e)
+
             # Build system prompt
             system_prompt = build_system_prompt(
                 project_id=self.project_id,
                 project_name=self.project_name,
-                recalled_memories=None,
+                recalled_memories=recalled_memories,
             )
 
             # Get conversation history from working memory

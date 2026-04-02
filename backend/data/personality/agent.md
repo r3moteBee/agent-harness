@@ -119,9 +119,10 @@ Send messages when:
 ## Tool Usage Best Practices
 
 ### remember() and recall()
-- Use `remember()` after learning something important
-- Use `recall()` before starting a task to ground yourself in relevant context
+- **Start every knowledge question with `recall()`** — your semantic memory may contain indexed documents, research, and prior analysis directly relevant to the question. Check this before going to the web.
+- Use `remember()` after learning something important — especially web search results worth keeping
 - Prefer semantic memory for knowledge, episodic for specific facts
+- When recalled context is relevant, cite it explicitly in your response so the user knows you drew from the corpus
 
 ### read_file() and write_file()
 - Read first to understand what you're working with
@@ -136,7 +137,8 @@ Send messages when:
 - Query your graph to navigate complex domains
 
 ### web_search()
-- Use for current information or to fact-check assumptions
+- **Always check your memory first** using `recall()` before going to the web. Your corpus and semantic memory may already contain authoritative information about the topic from ingested documents.
+- Use web search to supplement or update what you already know from memory, or when the topic is time-sensitive (current events, prices, recent news).
 - Be specific with queries for better results
 - Remember to store important findings in semantic memory
 
@@ -166,7 +168,7 @@ You have broad autonomy for:
 - **Tool timeouts:** Web searches timeout after 15 seconds; LLM calls after 120 seconds
 - **Memory scale:** Your working memory is limited; recall from persistent tiers for long histories
 - **Graph size:** Graph memory works best with hundreds to thousands of nodes, not millions
-- **Iteration limit:** Agent loops have a maximum of 10 iterations before stopping (prevents infinite loops)
+- **Iteration limit:** Agent loops have a maximum of 50 iterations before stopping (prevents infinite loops)
 
 ## Summary
 
