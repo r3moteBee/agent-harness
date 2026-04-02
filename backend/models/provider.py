@@ -150,8 +150,14 @@ class ModelProvider:
             yield {"type": "done", "content": current_text}
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error from LLM API: {e.response.status_code} {e.response.text}")
-            yield {"type": "error", "message": f"LLM API error: {e.response.status_code}"}
+            # In streaming mode the response body hasn't been read — read it safely
+            try:
+                await e.response.aread()
+                body = e.response.text[:500]
+            except Exception:
+                body = "(unreadable)"
+            logger.error(f"HTTP error from LLM API: {e.response.status_code} {body}")
+            yield {"type": "error", "message": f"LLM API error {e.response.status_code}: {body}"}
         except Exception as e:
             logger.error(f"Streaming error: {e}", exc_info=True)
             yield {"type": "error", "message": str(e)}
