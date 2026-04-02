@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 _PUBLIC_PATHS = {
     "/",
     "/health",
+    "/api/health",
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -165,8 +166,9 @@ app.websocket("/ws/chat")(websocket_chat)
 
 
 @app.get("/health")
+@app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "version": "2026-04-02-07"}
+    return {"status": "ok", "version": app.version}
 
 
 @app.get("/")
