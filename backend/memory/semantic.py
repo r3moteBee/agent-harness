@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import asyncio as _asyncio
 logger = logging.getLogger(__name__)
 
 
@@ -84,7 +85,8 @@ class SemanticMemory:
             collection = self._get_collection()
             if self._embedding_fn:
                 embedding = await self._embedding_fn(content)
-                collection.upsert(
+                await _asyncio.to_thread(
+                    collection.upsert,
                     ids=[doc_id],
                     documents=[content],
                     metadatas=[meta],
@@ -92,7 +94,8 @@ class SemanticMemory:
                 )
             else:
                 # Let ChromaDB use its default embedding function
-                collection.upsert(
+                await _asyncio.to_thread(
+                    collection.upsert,
                     ids=[doc_id],
                     documents=[content],
                     metadatas=[meta],
@@ -120,7 +123,7 @@ class SemanticMemory:
             if where:
                 kwargs["where"] = where
 
-            results = collection.query(**kwargs)
+            results = await _asyncio.to_thread(collection.query, **kwargs)
 
             items = []
             if results and results.get("ids") and results["ids"][0]:
