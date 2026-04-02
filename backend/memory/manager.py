@@ -266,10 +266,20 @@ def create_memory_manager(
     session_id: str | None = None,
     provider: Any = None,
 ) -> MemoryManager:
-    """Factory function to create a MemoryManager with optional embedding support."""
+    """Factory function to create a MemoryManager with optional embedding support.
+
+    Uses the dedicated embedding provider when available so embeddings can be
+    routed to a different endpoint/model than the primary chat LLM.
+    """
     embedding_fn = None
-    if provider:
-        embedding_fn = provider.embed
+    try:
+        from models.provider import get_embedding_provider
+        emb_provider = get_embedding_provider()
+        embedding_fn = emb_provider.embed
+    except Exception:
+        # Fall back to the primary provider passed in
+        if provider:
+            embedding_fn = provider.embed
     return MemoryManager(
         project_id=project_id,
         session_id=session_id,

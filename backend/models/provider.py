@@ -237,28 +237,89 @@ class ModelProvider:
 
 
 _provider_instance: ModelProvider | None = None
+_embedding_provider_instance: ModelProvider | None = None
+_prefill_provider_instance: ModelProvider | None = None
+
+
+def _vault_or(key: str, fallback: str = "") -> str | None:
+    """Read a vault secret, returning None if empty so callers fall back to defaults."""
+    try:
+        from secrets.vault import get_vault
+        val = get_vault().get_secret(key)
+        return val if val else None
+    except Exception:
+        return None
 
 
 def get_provider() -> ModelProvider:
-    """Get the singleton model provider, applying vault overrides over .env defaults."""
+    """Get the singleton primary model provider."""
     global _provider_instance
     if _provider_instance is None:
-        try:
-            from secrets.vault import get_vault
-            vault = get_vault()
-            _provider_instance = ModelProvider(
-                base_url=vault.get_secret("llm_base_url") or None,
-                api_key=vault.get_secret("llm_api_key") or None,
-                model=vault.get_secret("llm_model") or None,
-                embedding_model=vault.get_secret("embedding_model") or None,
-            )
-        except Exception as e:
-            logger.warning("Could not load vault overrides, falling back to .env: %s", e)
-            _provider_instance = ModelProvider()
+        _provider_instance = ModelProvider(
+            base_url=_vault_or("llm_base_url"),
+            api_key=_vault_or("llm_api_key"),
+            model=_vault_or("llm_model"),
+            embedding_model=_vault_or("embedding_model"),
+        )
     return _provider_instance
 
 
+def get_embedding_provider() -> ModelProvider:
+    """Get the singleton embedding provider.
+
+    Falls back to the primary provider's endpoint/key when no separate
+    embedding_base_url is configured.
+    """
+    global _embedding_provider_instance
+    if _embedding_provider_instance is None:
+        # Resolve: vault → .env → primary provider fallback
+        primary = get_provider()
+        emb_base = _vault_or("embedding_base_url") or settings.embedding_base_url or None
+        emb_key = _vault_or("embedding_api_key") or settings.embedding_api_key or None
+        emb_model = _vault_or("embedding_model") or settings.embedding_model or None
+
+        _embedding_provider_instance = ModelProvider(
+            base_url=emb_base or primary.base_url,
+            api_key=emb_key or primary.api_key,
+            model=primary.model,  # not used for embeddings, but required by init
+            embedding_model=emb_model or primary.embedding_model,
+        )
+        if emb_base:
+            logger.info("Embedding provider configured at %s", emb_base)
+    return _embedding_provider_instance
+
+
+def get_prefill_provider() -> ModelProvider:
+    """Get the singleton prefill/summarisation provider.
+
+    Falls back to the primary provider when no separate prefill_base_url is
+    configured.  The model defaults to llm_prefill_model, then llm_model.
+    """
+    global _prefill_provider_instance
+    if _prefill_provider_instance is None:
+        primary = get_provider()
+        pre_base = _vault_or("prefill_base_url") or settings.prefill_base_url or None
+        pre_key = _vault_or("prefill_api_key") or settings.prefill_api_key or None
+        pre_model = (
+            _vault_or("llm_prefill_model")
+            or settings.llm_prefill_model
+            or primary.model
+        )
+
+        _prefill_provider_instance = ModelProvider(
+            base_url=pre_base or primary.base_url,
+            api_key=pre_key or primary.api_key,
+            model=pre_model,
+            embedding_model=primary.embedding_model,
+        )
+        if pre_base:
+            logger.info("Prefill provider configured at %s (model: %s)", pre_base, pre_model)
+    return _prefill_provider_instance
+
+
 def reset_provider() -> None:
-    """Reset the provider singleton (call after settings change)."""
-    global _provider_instance
+    """Reset all provider singletons (call after settings change)."""
+    global _provider_instance, _embedding_provider_instance, _prefill_provider_instance
     _provider_instance = None
+    _embedding_provider_instance = None
+    _prefill_provider_instance = None

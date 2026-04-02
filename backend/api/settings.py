@@ -20,7 +20,11 @@ class SettingsUpdate(BaseModel):
     llm_api_key: str | None = None
     llm_model: str | None = None
     llm_prefill_model: str | None = None
+    prefill_base_url: str | None = None
+    prefill_api_key: str | None = None
     embedding_model: str | None = None
+    embedding_base_url: str | None = None
+    embedding_api_key: str | None = None
     search_url: str | None = None
     search_api_key: str | None = None
     memory_recall_enabled: bool | None = None
@@ -42,7 +46,11 @@ def _get_effective_settings() -> dict[str, Any]:
         "llm_api_key_set": bool(vault.get_secret("llm_api_key") or settings_config.llm_api_key),
         "llm_model": vault.get_secret("llm_model") or settings_config.llm_model,
         "llm_prefill_model": vault.get_secret("llm_prefill_model") or settings_config.llm_prefill_model,
+        "prefill_base_url": vault.get_secret("prefill_base_url") or settings_config.prefill_base_url,
+        "prefill_api_key_set": bool(vault.get_secret("prefill_api_key") or settings_config.prefill_api_key),
         "embedding_model": vault.get_secret("embedding_model") or settings_config.embedding_model,
+        "embedding_base_url": vault.get_secret("embedding_base_url") or settings_config.embedding_base_url,
+        "embedding_api_key_set": bool(vault.get_secret("embedding_api_key") or settings_config.embedding_api_key),
         "search_url": vault.get_secret("search_url") or settings_config.search_url,
         "search_api_key_set": bool(vault.get_secret("search_api_key") or settings_config.search_api_key),
         "chroma_host": settings_config.chroma_host,
@@ -80,8 +88,16 @@ async def update_settings(req: SettingsUpdate) -> dict[str, Any]:
         vault.set_secret("llm_model", req.llm_model)
     if req.llm_prefill_model is not None:
         vault.set_secret("llm_prefill_model", req.llm_prefill_model)
+    if req.prefill_base_url is not None:
+        vault.set_secret("prefill_base_url", req.prefill_base_url)
+    if req.prefill_api_key is not None:
+        vault.set_secret("prefill_api_key", req.prefill_api_key)
     if req.embedding_model is not None:
         vault.set_secret("embedding_model", req.embedding_model)
+    if req.embedding_base_url is not None:
+        vault.set_secret("embedding_base_url", req.embedding_base_url)
+    if req.embedding_api_key is not None:
+        vault.set_secret("embedding_api_key", req.embedding_api_key)
     if req.search_url is not None:
         vault.set_secret("search_url", req.search_url)
     if req.search_api_key is not None:
@@ -141,7 +157,9 @@ async def set_secret(key: str, req: SecretUpdate) -> dict[str, str]:
     vault = get_vault()
     vault.set_secret(key, req.value)
     # Reset provider if it's an LLM-related secret
-    if key in ("llm_base_url", "llm_api_key", "llm_model"):
+    if key in ("llm_base_url", "llm_api_key", "llm_model",
+                "embedding_base_url", "embedding_api_key", "embedding_model",
+                "prefill_base_url", "prefill_api_key", "llm_prefill_model"):
         reset_provider()
     return {"status": "set", "key": key}
 

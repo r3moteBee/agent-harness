@@ -15,7 +15,14 @@ class Settings(BaseSettings):
     # Optional cheaper/faster model for summarisation, memory consolidation, etc.
     # Falls back to llm_model when not set.
     llm_prefill_model: str = Field(default="", env="LLM_PREFILL_MODEL")
+    # Separate endpoint/key for the prefill provider (falls back to primary LLM when blank)
+    prefill_base_url: str = Field(default="", env="PREFILL_BASE_URL")
+    prefill_api_key: str = Field(default="", env="PREFILL_API_KEY")
+
     embedding_model: str = Field(default="text-embedding-3-small", env="EMBEDDING_MODEL")
+    # Separate endpoint/key for embeddings (falls back to primary LLM when blank)
+    embedding_base_url: str = Field(default="", env="EMBEDDING_BASE_URL")
+    embedding_api_key: str = Field(default="", env="EMBEDDING_API_KEY")
 
     # Security
     vault_master_key: str = Field(default="dev-key-change-in-production-32x", env="VAULT_MASTER_KEY")

@@ -1,19 +1,27 @@
 import React, { useState, useEffect } from 'react'
-import { Save, Eye, EyeOff, Trash2, Plus, Check, X, RefreshCw, Search, Brain } from 'lucide-react'
+import { Save, Eye, EyeOff, Trash2, Plus, Check, X, RefreshCw, Search, Brain, ChevronDown, ChevronRight } from 'lucide-react'
 import { useStore } from '../store'
 import { settingsApi } from '../api/client'
 
 function LLMSection() {
   const [settings, setSettings] = useState({
     llm_base_url: '',
-    llm_api_key: '',       // new value only; blank = keep existing
+    llm_api_key: '',
     llm_model: '',
     llm_prefill_model: '',
+    prefill_base_url: '',
+    prefill_api_key: '',
     embedding_model: '',
+    embedding_base_url: '',
+    embedding_api_key: '',
   })
   const [apiKeySet, setApiKeySet] = useState(false)
+  const [prefillKeySet, setPrefillKeySet] = useState(false)
+  const [embeddingKeySet, setEmbeddingKeySet] = useState(false)
   const [models, setModels] = useState([])
   const [showKey, setShowKey] = useState(false)
+  const [showPrefillOverride, setShowPrefillOverride] = useState(false)
+  const [showEmbeddingOverride, setShowEmbeddingOverride] = useState(false)
   const [loading, setLoading] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testStatus, setTestStatus] = useState(null)
@@ -28,12 +36,21 @@ function LLMSection() {
       const d = res.data
       setSettings({
         llm_base_url:      d.llm_base_url      || '',
-        llm_api_key:       '',                      // never returned; blank = keep existing
+        llm_api_key:       '',
         llm_model:         d.llm_model         || '',
         llm_prefill_model: d.llm_prefill_model || '',
+        prefill_base_url:  d.prefill_base_url  || '',
+        prefill_api_key:   '',
         embedding_model:   d.embedding_model   || '',
+        embedding_base_url: d.embedding_base_url || '',
+        embedding_api_key: '',
       })
       setApiKeySet(d.llm_api_key_set || false)
+      setPrefillKeySet(d.prefill_api_key_set || false)
+      setEmbeddingKeySet(d.embedding_api_key_set || false)
+      // Auto-expand override sections if they have values
+      if (d.prefill_base_url) setShowPrefillOverride(true)
+      if (d.embedding_base_url) setShowEmbeddingOverride(true)
     } catch (err) {
       addNotification({ type: 'error', message: err.message })
     }
@@ -74,15 +91,15 @@ function LLMSection() {
         llm_base_url:      settings.llm_base_url,
         llm_model:         settings.llm_model,
         llm_prefill_model: settings.llm_prefill_model,
+        prefill_base_url:  settings.prefill_base_url,
         embedding_model:   settings.embedding_model,
+        embedding_base_url: settings.embedding_base_url,
       }
-      // Only send key if user typed a new one
-      if (settings.llm_api_key) {
-        payload.llm_api_key = settings.llm_api_key
-        setApiKeySet(true)
-      }
+      if (settings.llm_api_key) { payload.llm_api_key = settings.llm_api_key; setApiKeySet(true) }
+      if (settings.prefill_api_key) { payload.prefill_api_key = settings.prefill_api_key; setPrefillKeySet(true) }
+      if (settings.embedding_api_key) { payload.embedding_api_key = settings.embedding_api_key; setEmbeddingKeySet(true) }
       await settingsApi.update(payload)
-      setSettings((s) => ({ ...s, llm_api_key: '' }))  // clear the key field after save
+      setSettings((s) => ({ ...s, llm_api_key: '', prefill_api_key: '', embedding_api_key: '' }))
       addNotification({ type: 'success', message: 'LLM settings saved' })
     } catch (err) {
       addNotification({ type: 'error', message: err.message })
@@ -174,6 +191,33 @@ function LLMSection() {
           className={inputClass}
         />
         <p className="text-xs text-gray-600 mt-1">Used for background tasks like memory consolidation. Falls back to the primary model when blank.</p>
+
+        {/* Prefill provider override */}
+        <button
+          onClick={() => setShowPrefillOverride(!showPrefillOverride)}
+          className="flex items-center gap-1 mt-2 text-xs text-gray-500 hover:text-gray-300"
+        >
+          {showPrefillOverride ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          Separate provider endpoint
+        </button>
+        {showPrefillOverride && (
+          <div className="mt-2 pl-3 border-l-2 border-gray-700 space-y-2">
+            <input
+              type="text"
+              value={settings.prefill_base_url}
+              onChange={(e) => setSettings({ ...settings, prefill_base_url: e.target.value })}
+              placeholder="Endpoint URL (blank = use primary)"
+              className={inputClass}
+            />
+            <input
+              type="password"
+              value={settings.prefill_api_key}
+              onChange={(e) => setSettings({ ...settings, prefill_api_key: e.target.value })}
+              placeholder={prefillKeySet ? '(key saved — blank to keep)' : 'API key (blank = use primary)'}
+              className={inputClass}
+            />
+          </div>
+        )}
       </div>
 
       {/* Embedding model */}
@@ -191,6 +235,33 @@ function LLMSection() {
           className={inputClass}
         />
         <p className="text-xs text-gray-600 mt-1">Used for semantic memory search. Leave blank to use the provider default.</p>
+
+        {/* Embedding provider override */}
+        <button
+          onClick={() => setShowEmbeddingOverride(!showEmbeddingOverride)}
+          className="flex items-center gap-1 mt-2 text-xs text-gray-500 hover:text-gray-300"
+        >
+          {showEmbeddingOverride ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          Separate provider endpoint
+        </button>
+        {showEmbeddingOverride && (
+          <div className="mt-2 pl-3 border-l-2 border-gray-700 space-y-2">
+            <input
+              type="text"
+              value={settings.embedding_base_url}
+              onChange={(e) => setSettings({ ...settings, embedding_base_url: e.target.value })}
+              placeholder="Endpoint URL (blank = use primary)"
+              className={inputClass}
+            />
+            <input
+              type="password"
+              value={settings.embedding_api_key}
+              onChange={(e) => setSettings({ ...settings, embedding_api_key: e.target.value })}
+              placeholder={embeddingKeySet ? '(key saved — blank to keep)' : 'API key (blank = use primary)'}
+              className={inputClass}
+            />
+          </div>
+        )}
       </div>
 
       {/* Actions */}
