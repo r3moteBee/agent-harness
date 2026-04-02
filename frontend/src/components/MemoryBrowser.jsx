@@ -98,7 +98,7 @@ function SemanticTab() {
     setLoading(true)
     try {
       const res = await memoryApi.listSemantic(activeProject?.id || 'default', 100)
-      setDocs(res.data.items || [])
+      setDocs(res.data.documents || [])
     } catch (err) {
       addNotification({ type: 'error', message: err.message })
     }

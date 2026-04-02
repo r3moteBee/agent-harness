@@ -15,7 +15,7 @@ from models.provider import ModelProvider
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-MAX_TOOL_ITERATIONS = 10
+MAX_TOOL_ITERATIONS = 50
 
 
 class AgentCore:

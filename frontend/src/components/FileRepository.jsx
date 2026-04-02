@@ -20,11 +20,7 @@ export default function FileRepository() {
     setLoading(true)
     try {
       const res = await filesApi.list(activeProject?.id || 'default', path)
-      // API returns { directories: [...], files: [...] } — merge into one list,
-      // directories first, then files, each tagged with is_dir.
-      const dirs  = (res.data.directories || []).map(d => ({ ...d, is_dir: true }))
-      const files = (res.data.files      || []).map(f => ({ ...f, is_dir: false }))
-      setItems([...dirs, ...files])
+      setItems(res.data.items || [])
       setCurrentPath(path)
       setFileContent(null)
       setPreviewFile(null)

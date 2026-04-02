@@ -201,18 +201,45 @@ async def execute_tool(
 ) -> str:
     """Execute a tool call and return the result as a string."""
     try:
+        effective_project = project_id or "default"
+
         if tool_name == "remember":
-            return f"Stored in {tool_args['tier']} memory: {tool_args['content'][:100]}"
+            from memory.manager import create_memory_manager
+            mgr = create_memory_manager(project_id=effective_project)
+            tier = tool_args.get("tier", "semantic")
+            content = tool_args["content"]
+            metadata = tool_args.get("metadata", {})
+            ref = await mgr.store(content=content, tier=tier, metadata=metadata)
+            return f"Stored in {tier} memory: {content[:100]} ({ref})"
 
         elif tool_name == "recall":
+            from memory.manager import create_memory_manager
+            mgr = create_memory_manager(project_id=effective_project)
             tiers = tool_args.get("tiers", ["episodic", "semantic"])
-            return f"Searching for: {tool_args['query']} in tiers: {tiers}"
+            query = tool_args["query"]
+            results = await mgr.recall(query=query, tiers=tiers, project_id=effective_project)
+            if not results:
+                return "No memories found."
+            lines = [f"[{r.get('tier','?')}] {r.get('content','')[:200]}" for r in results[:8]]
+            return "\n\n".join(lines)
 
         elif tool_name == "create_graph_node":
-            return f"Graph node created: {tool_args['label']} (type: {tool_args['node_type']})"
+            from memory.graph import GraphMemory
+            graph = GraphMemory(project_id=effective_project)
+            label = tool_args["label"]
+            node_type = tool_args.get("node_type", "concept")
+            metadata = tool_args.get("metadata", {})
+            node_id = await graph.add_node(node_type=node_type, label=label, metadata=metadata)
+            return f"Graph node created: {label} (type: {node_type}, id: {node_id})"
 
         elif tool_name == "link_concepts":
-            return f"Linked '{tool_args['node_a_label']}' and '{tool_args['node_b_label']}' via: {tool_args['relationship']}"
+            from memory.graph import GraphMemory
+            graph = GraphMemory(project_id=effective_project)
+            node_a = tool_args["node_a_label"]
+            node_b = tool_args["node_b_label"]
+            relationship = tool_args["relationship"]
+            result = await graph.add_edge_by_label(label_a=node_a, label_b=node_b, relationship=relationship)
+            return result
 
         elif tool_name == "read_file":
             safe_path = _safe_workspace_path(tool_args["path"], project_id)
