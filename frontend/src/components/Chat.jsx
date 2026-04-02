@@ -7,19 +7,26 @@ import { createChatSocket } from '../api/client'
 
 function ToolCallBlock({ toolCall }) {
   const [expanded, setExpanded] = useState(false)
+  const isContextLoad = toolCall.name === 'context_loaded'
   return (
-    <div className="my-2 border border-gray-700 rounded-lg overflow-hidden text-xs">
+    <div className={`my-2 border rounded-lg overflow-hidden text-xs ${isContextLoad ? 'border-brand-700' : 'border-gray-700'}`}>
       <button
-        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-750 text-left"
+        className={`w-full flex items-center gap-2 px-3 py-2 text-left ${isContextLoad ? 'bg-brand-900 hover:bg-brand-800' : 'bg-gray-800 hover:bg-gray-750'}`}
         onClick={() => setExpanded(!expanded)}
       >
-        <Zap className="w-3 h-3 text-yellow-400 flex-shrink-0" />
-        <span className="text-yellow-300 font-mono font-medium">{toolCall.name}</span>
+        {isContextLoad
+          ? <Brain className="w-3 h-3 text-brand-400 flex-shrink-0" />
+          : <Zap className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
+        <span className={`font-mono font-medium ${isContextLoad ? 'text-brand-300' : 'text-yellow-300'}`}>
+          {isContextLoad
+            ? `corpus context loaded (${toolCall.args?.sources || 0} results from ${(toolCall.args?.tiers || []).join(', ')})`
+            : toolCall.name}
+        </span>
         {expanded ? <ChevronDown className="w-3 h-3 ml-auto text-gray-500" /> : <ChevronRight className="w-3 h-3 ml-auto text-gray-500" />}
       </button>
       {expanded && (
         <div className="px-3 py-2 bg-gray-900 space-y-2">
-          {toolCall.args && Object.keys(toolCall.args).length > 0 && (
+          {!isContextLoad && toolCall.args && Object.keys(toolCall.args).length > 0 && (
             <div>
               <div className="text-gray-500 mb-1">Args:</div>
               <pre className="text-green-300 whitespace-pre-wrap break-all">
@@ -29,8 +36,8 @@ function ToolCallBlock({ toolCall }) {
           )}
           {toolCall.result && (
             <div>
-              <div className="text-gray-500 mb-1">Result:</div>
-              <pre className="text-blue-300 whitespace-pre-wrap break-all">{toolCall.result}</pre>
+              <div className="text-gray-500 mb-1">{isContextLoad ? 'Injected context:' : 'Result:'}</div>
+              <pre className={`whitespace-pre-wrap break-all ${isContextLoad ? 'text-brand-200' : 'text-blue-300'}`}>{toolCall.result}</pre>
             </div>
           )}
         </div>

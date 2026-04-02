@@ -30,12 +30,18 @@ def build_system_prompt(
     if recalled_memories:
         memory_lines = []
         for m in recalled_memories:
-            source = m.get("source", "memory")
+            tier = m.get("tier", m.get("source", "memory"))
             content = m.get("content", "")
             if content:
-                memory_lines.append(f"[{source}] {content}")
+                memory_lines.append(f"[{tier}] {content}")
         if memory_lines:
-            memory_section = "\n\n## Recalled Context\nRelevant information from your memory:\n" + "\n\n".join(memory_lines)
+            memory_section = (
+                "\n\n## Corpus Context (Retrieved from your knowledge base)"
+                "\nThe following was retrieved from your indexed corpus and graph. "
+                "**Treat this as your primary source. Cite it in your response and only use web search "
+                "to fill gaps or verify time-sensitive details not covered here.**\n\n"
+                + "\n\n".join(memory_lines)
+            )
 
     extra_section = f"\n\n## Additional Context\n{extra_context}" if extra_context else ""
 
