@@ -97,7 +97,7 @@ class MemoryManager:
         """
         active_project = project_id or self.project_id
         if tiers is None:
-            tiers = ["semantic", "episodic"]
+            tiers = ["semantic", "episodic", "graph"]
 
         all_results: list[dict[str, Any]] = []
 
@@ -133,14 +133,25 @@ class MemoryManager:
 
         if "graph" in tiers:
             try:
-                graph_results = await self.graph.search_nodes(query, limit=limit_per_tier)
-                for r in graph_results:
+                graph_results = await self.graph.search_nodes(query, limit=limit_per_tier * 2)
+                # Also fetch all edges once to build relationship lines
+                all_edges = await self.graph.list_edges(limit=500)
+                edge_index: dict[str, list[str]] = {}
+                for e in all_edges:
+                    a, b, rel = e["node_a_label"], e["node_b_label"], e["relationship"]
+                    edge_index.setdefault(a, []).append(f"  → {rel}: {b}")
+                    edge_index.setdefault(b, []).append(f"  ← {rel}: {a}")
+
+                for r in graph_results[:limit_per_tier]:
+                    label = r["label"]
+                    rels = edge_index.get(label, [])
+                    rel_text = ("\n" + "\n".join(rels)) if rels else ""
                     all_results.append({
                         "id": r["id"],
-                        "content": f"[{r['node_type']}] {r['label']}",
+                        "content": f"[graph:{r['node_type']}] {label}{rel_text}",
                         "source": "graph",
                         "tier": "graph",
-                        "score": 0.6,
+                        "score": 0.65,
                         "metadata": r.get("metadata", {}),
                     })
             except Exception as e:

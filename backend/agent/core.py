@@ -66,7 +66,7 @@ class AgentCore:
                 mgr = create_memory_manager(project_id=self.project_id or "default")
                 results = await mgr.recall(
                     query=user_message,
-                    tiers=["semantic", "episodic"],
+                    tiers=["semantic", "episodic", "graph"],
                     project_id=self.project_id or "default",
                     limit_per_tier=5,
                 )

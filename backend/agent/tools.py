@@ -215,12 +215,12 @@ async def execute_tool(
         elif tool_name == "recall":
             from memory.manager import create_memory_manager
             mgr = create_memory_manager(project_id=effective_project)
-            tiers = tool_args.get("tiers", ["episodic", "semantic"])
+            tiers = tool_args.get("tiers", ["semantic", "episodic", "graph"])
             query = tool_args["query"]
             results = await mgr.recall(query=query, tiers=tiers, project_id=effective_project)
             if not results:
                 return "No memories found."
-            lines = [f"[{r.get('tier','?')}] {r.get('content','')[:200]}" for r in results[:8]]
+            lines = [f"[{r.get('tier','?')}] {r.get('content','')[:400]}" for r in results[:10]]
             return "\n\n".join(lines)
 
         elif tool_name == "create_graph_node":
