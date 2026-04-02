@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Save, Eye, EyeOff, Trash2, Plus, Check, X, RefreshCw, Search } from 'lucide-react'
+import { Save, Eye, EyeOff, Trash2, Plus, Check, X, RefreshCw, Search, Brain } from 'lucide-react'
 import { useStore } from '../store'
 import { settingsApi } from '../api/client'
 
@@ -327,6 +327,66 @@ function SearchSection() {
   )
 }
 
+function AgentBehaviorSection() {
+  const [memoryRecall, setMemoryRecall] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const addNotification = useStore((s) => s.addNotification)
+
+  useEffect(() => {
+    settingsApi.get().then((res) => {
+      // Default to true if the field is missing
+      setMemoryRecall(res.data.memory_recall_enabled !== false)
+    }).catch(() => {})
+  }, [])
+
+  const toggle = async (newValue) => {
+    setLoading(true)
+    try {
+      await settingsApi.update({ memory_recall_enabled: newValue })
+      setMemoryRecall(newValue)
+      addNotification({
+        type: 'success',
+        message: newValue ? 'Memory recall augmentation enabled' : 'Memory recall augmentation disabled',
+      })
+    } catch (err) {
+      addNotification({ type: 'error', message: err.message })
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Brain className="w-4 h-4 text-gray-400" />
+        <h3 className="text-sm font-semibold text-gray-200">Agent Behavior</h3>
+      </div>
+
+      <div className="flex items-center justify-between bg-gray-800 rounded-lg p-4 border border-gray-700">
+        <div className="flex-1 mr-4">
+          <p className="text-sm font-medium text-gray-200">Memory Recall Augmentation</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Pre-loads relevant memories from semantic, episodic, and graph tiers into each prompt.
+            Disable this if chat is crashing or ChromaDB is unavailable.
+          </p>
+        </div>
+        <button
+          onClick={() => toggle(!memoryRecall)}
+          disabled={loading}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${
+            memoryRecall ? 'bg-brand-600' : 'bg-gray-600'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              memoryRecall ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function SecretsSection() {
   const [secrets, setSecrets] = useState([])
   const [newKey, setNewKey] = useState('')
@@ -459,6 +519,8 @@ export default function Settings() {
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         <div className="max-w-2xl mx-auto p-6 space-y-8">
           <LLMSection />
+          <div className="border-t border-gray-800" />
+          <AgentBehaviorSection />
           <div className="border-t border-gray-800" />
           <SearchSection />
           <div className="border-t border-gray-800" />

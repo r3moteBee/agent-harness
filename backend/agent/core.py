@@ -62,37 +62,38 @@ class AgentCore:
             # Pre-recall relevant memories to inject into system prompt context
             recalled_memories = None
             try:
-                from memory.manager import create_memory_manager
-                mgr = create_memory_manager(project_id=self.project_id or "default")
-                import asyncio as _asyncio
-                try:
-                    results = await _asyncio.wait_for(
-                        mgr.recall(
-                            query=user_message,
-                            tiers=["semantic", "episodic", "graph"],
-                            project_id=self.project_id or "default",
-                            limit_per_tier=5,
-                        ),
-                        timeout=8.0,
-                    )
-                except _asyncio.TimeoutError:
-                    results = None
-                    logger.warning("Pre-recall timed out, proceeding without context")
-                if results:
-                    recalled_memories = results
-                    logger.debug("Pre-recalled %d memories for context", len(results))
-                    # Emit a visible context_loaded event so the UI can show what was injected
-                    summary_lines = [f"[{r.get('tier','?')}] {r.get('content','')[:120]}" for r in results]
-                    yield {
-                        "type": "tool_call",
-                        "name": "context_loaded",
-                        "args": {"sources": len(results), "tiers": list({r.get("tier") for r in results})},
-                    }
-                    yield {
-                        "type": "tool_result",
-                        "name": "context_loaded",
-                        "result": "\n\n".join(summary_lines),
-                    }
+                from api.settings import is_memory_recall_enabled
+                if is_memory_recall_enabled() and self.memory_manager:
+                    mgr = self.memory_manager
+                    try:
+                        results = await asyncio.wait_for(
+                            mgr.recall(
+                                query=user_message,
+                                tiers=["semantic", "episodic", "graph"],
+                                project_id=self.project_id or "default",
+                                limit_per_tier=5,
+                            ),
+                            timeout=4.0,
+                        )
+                    except asyncio.TimeoutError:
+                        results = None
+                        logger.warning("Pre-recall timed out, proceeding without context")
+                    if results:
+                        recalled_memories = results
+                        logger.debug("Pre-recalled %d memories for context", len(results))
+                        summary_lines = [f"[{r.get('tier','?')}] {r.get('content','')[:120]}" for r in results]
+                        yield {
+                            "type": "tool_call",
+                            "name": "context_loaded",
+                            "args": {"sources": len(results), "tiers": list({r.get("tier") for r in results})},
+                        }
+                        yield {
+                            "type": "tool_result",
+                            "name": "context_loaded",
+                            "result": "\n\n".join(summary_lines),
+                        }
+                else:
+                    logger.debug("Memory pre-recall disabled or no memory_manager available")
             except Exception as e:
                 logger.warning("Failed to pre-recall memories: %s", e)
 

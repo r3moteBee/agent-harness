@@ -65,6 +65,10 @@ class SemanticMemory:
             )
         return self._collection
 
+    async def _get_collection_async(self):
+        """Thread-safe async wrapper for _get_collection."""
+        return await _asyncio.to_thread(self._get_collection)
+
     async def store(
         self,
         content: str,
@@ -82,7 +86,7 @@ class SemanticMemory:
         meta = {k: str(v) for k, v in meta.items()}
 
         try:
-            collection = self._get_collection()
+            collection = await self._get_collection_async()
             if self._embedding_fn:
                 embedding = await self._embedding_fn(content)
                 await _asyncio.to_thread(
@@ -114,10 +118,13 @@ class SemanticMemory:
     ) -> list[dict[str, Any]]:
         """Search for semantically similar memories."""
         try:
-            collection = self._get_collection()
+            collection = await self._get_collection_async()
+            count = await _asyncio.to_thread(collection.count)
+            if count == 0:
+                return []
             kwargs: dict[str, Any] = {
                 "query_texts": [query],
-                "n_results": min(n, max(1, collection.count())),
+                "n_results": min(n, count),
                 "include": ["documents", "metadatas", "distances"],
             }
             if where:
@@ -146,8 +153,8 @@ class SemanticMemory:
     async def delete(self, doc_id: str) -> bool:
         """Delete a memory by ID."""
         try:
-            collection = self._get_collection()
-            collection.delete(ids=[doc_id])
+            collection = await self._get_collection_async()
+            await _asyncio.to_thread(collection.delete, ids=[doc_id])
             return True
         except Exception as e:
             logger.error(f"Failed to delete semantic memory {doc_id}: {e}")
@@ -160,11 +167,12 @@ class SemanticMemory:
     ) -> list[dict[str, Any]]:
         """List all semantic memories for this project."""
         try:
-            collection = self._get_collection()
-            total = collection.count()
+            collection = await self._get_collection_async()
+            total = await _asyncio.to_thread(collection.count)
             if total == 0:
                 return []
-            results = collection.get(
+            results = await _asyncio.to_thread(
+                collection.get,
                 include=["documents", "metadatas"],
                 limit=limit,
                 offset=offset,
@@ -186,6 +194,7 @@ class SemanticMemory:
     async def count(self) -> int:
         """Return the number of stored memories."""
         try:
-            return self._get_collection().count()
+            collection = await self._get_collection_async()
+            return await _asyncio.to_thread(collection.count)
         except Exception:
             return 0
