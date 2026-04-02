@@ -74,6 +74,7 @@ class ModelProvider:
             "model": self.model,
             "messages": messages,
             "stream": True,
+            "max_tokens": 4096,
         }
         if tools:
             payload["tools"] = tools
@@ -82,6 +83,7 @@ class ModelProvider:
         # Accumulate tool call chunks
         tool_call_accum: dict[int, dict[str, Any]] = {}
         current_text = ""
+        finish_reason: str | None = None
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -107,7 +109,13 @@ class ModelProvider:
                         if not choices:
                             continue
                         delta = choices[0].get("delta", {})
-                        finish_reason = choices[0].get("finish_reason")
+                        # Track finish_reason but don't break early — wait for
+                        # [DONE]. Some providers (Gemini, RouteLLM) send
+                        # finish_reason in the same chunk as the last content
+                        # token, so breaking here truncates the response.
+                        chunk_finish = choices[0].get("finish_reason")
+                        if chunk_finish:
+                            finish_reason = chunk_finish
 
                         # Text content
                         content = delta.get("content", "")
@@ -124,14 +132,11 @@ class ModelProvider:
                                     "name": "",
                                     "args_str": "",
                                 }
-                            fn = tc_delta.get("function", {})
-                            if fn.get("name"):
-                                tool_call_accum[idx]["name"] += fn["name"]
-                            if fn.get("arguments"):
-                                tool_call_accum[idx]["args_str"] += fn["arguments"]
-
-                        if finish_reason in ("tool_calls", "stop"):
-                            break
+                            fn_delta = tc_delta.get("function", {})
+                            if fn_delta.get("name"):
+                                tool_call_accum[idx]["name"] += fn_delta["name"]
+                            if fn_delta.get("arguments"):
+                                tool_call_accum[idx]["args_str"] += fn_delta["arguments"]
 
             # Emit completed tool calls
             for idx in sorted(tool_call_accum.keys()):
@@ -150,8 +155,14 @@ class ModelProvider:
             yield {"type": "done", "content": current_text}
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error from LLM API: {e.response.status_code} {e.response.text}")
-            yield {"type": "error", "message": f"LLM API error: {e.response.status_code}"}
+            # In streaming mode the response body hasn't been read — read it safely
+            try:
+                await e.response.aread()
+                body = e.response.text[:500]
+            except Exception:
+                body = "(unreadable)"
+            logger.error(f"HTTP error from LLM API: {e.response.status_code} {body}")
+            yield {"type": "error", "message": f"LLM API error {e.response.status_code}: {body}"}
         except Exception as e:
             logger.error(f"Streaming error: {e}", exc_info=True)
             yield {"type": "error", "message": str(e)}
@@ -229,10 +240,21 @@ _provider_instance: ModelProvider | None = None
 
 
 def get_provider() -> ModelProvider:
-    """Get the singleton model provider."""
+    """Get the singleton model provider, applying vault overrides over .env defaults."""
     global _provider_instance
     if _provider_instance is None:
-        _provider_instance = ModelProvider()
+        try:
+            from secrets.vault import get_vault
+            vault = get_vault()
+            _provider_instance = ModelProvider(
+                base_url=vault.get_secret("llm_base_url") or None,
+                api_key=vault.get_secret("llm_api_key") or None,
+                model=vault.get_secret("llm_model") or None,
+                embedding_model=vault.get_secret("embedding_model") or None,
+            )
+        except Exception as e:
+            logger.warning("Could not load vault overrides, falling back to .env: %s", e)
+            _provider_instance = ModelProvider()
     return _provider_instance
 
 

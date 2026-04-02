@@ -15,54 +15,100 @@ Agent Harness is a self-hosted, production-ready agentic AI framework with a 5-t
 - **WebSocket Communication**: Real-time agent status and message streaming
 - **Telegram Integration**: Optional Telegram bot for remote agent control
 
+## System Requirements
+
+**Docker mode** (recommended for servers):
+- Docker 24+ with the Compose plugin
+- Git
+- Any modern 64-bit OS (Linux, macOS, Windows with WSL2)
+
+**Local mode** (no Docker needed):
+- Git
+- Python 3.11+ — available natively on Ubuntu 22.04+, Debian 12+, Fedora 37+, macOS 13+ (Homebrew), Alpine 3.17+
+- Node.js 18+ and npm
+
+> The installer will attempt to install Python and Node automatically using your system's package manager (Homebrew, apt, dnf, yum, pacman, or apk) if they are not already present.
+
 ## Quick Start
 
-### 1. Clone and Setup
+The easiest way to install is with the one-line installer, which handles cloning, dependencies, and configuration automatically. It will ask whether you want **local mode** (no Docker) or **Docker mode** at the start.
 
 ```bash
-git clone https://github.com/yourusername/agent-harness.git
-cd agent-harness
+curl -fsSL https://raw.githubusercontent.com/r3moteBee/agent-harness/main/deploy.sh | bash
 ```
 
-### 2. Copy Environment Configuration
+To skip the prompt, pass `--mode` directly:
 
 ```bash
-cp .env.example .env
+# Local mode (no Docker required)
+curl -fsSL .../deploy.sh | bash -s -- --mode local
+
+# Docker mode
+curl -fsSL .../deploy.sh | bash -s -- --mode docker
 ```
 
-### 3. Configure API Keys
-
-Edit `.env` and add your LLM provider credentials:
+Once installed, edit `.env` in your install directory and set your LLM credentials:
 
 ```bash
-nano .env
+nano ~/agent-harness/.env
 ```
 
 Required fields:
 - `LLM_API_KEY`: Your API key (OpenAI, Anthropic, etc.)
 - `LLM_BASE_URL`: Your LLM provider endpoint (or http://ollama:11434/v1 for local)
 - `LLM_MODEL`: Model name (gpt-4o, claude-3-sonnet, llama3, etc.)
-- `VAULT_MASTER_KEY`: Generate a random 32-character string
-- `SECRET_KEY`: Generate another random secret
 
-### 4. Start Services
+### Starting and Stopping
+
+**Local mode:**
 
 ```bash
-make up
+~/agent-harness/start.sh   # start backend + frontend
+~/agent-harness/stop.sh    # stop all processes
 ```
 
-This command will:
-- Build Docker images
-- Create necessary data directories
-- Start all services (backend, frontend, ChromaDB, Nginx)
-- Initialize the database
+- Web UI: http://localhost:3000
+- API / API Docs: http://localhost:8000 / http://localhost:8000/docs
 
-### 5. Access the Application
+**Docker mode:**
 
-- **Web UI**: http://localhost
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
+```bash
+cd ~/agent-harness
+make up        # build images and start all services
+make down      # stop all services
+make logs      # tail logs for all services
+```
+
+- Web UI: http://localhost (port 80 by default)
+- API Docs: http://localhost/docs
+
+> **Note:** The `make` commands are Docker-only. If you installed in local mode, use `start.sh` / `stop.sh` instead.
+
+### HTTPS with Caddy
+
+The installer can automatically set up [Caddy](https://caddyserver.com) as a reverse proxy with free Let's Encrypt HTTPS certificates. During installation, enter your domain when prompted, or pass it as a flag:
+
+```bash
+curl -fsSL .../deploy.sh | bash -s -- --mode local --domain agent.example.com
+```
+
+Prerequisites: your domain's DNS must point to the server, and ports 80 + 443 must be open in your firewall or cloud security group.
+
+To set up HTTPS after an existing install:
+
+```bash
+# Install Caddy (Ubuntu/Debian)
+sudo apt-get install -y caddy
+
+# Copy and edit the included Caddyfile
+sudo cp ~/agent-harness/Caddyfile /etc/caddy/Caddyfile
+# Edit /etc/caddy/Caddyfile and replace {$DOMAIN:localhost} with your domain
+
+# Start Caddy
+sudo systemctl enable caddy && sudo systemctl start caddy
+```
+
+Caddy will automatically obtain and renew TLS certificates. No manual cert management needed.
 
 ## Architecture Overview
 
@@ -593,7 +639,6 @@ Contributions are welcome! Please:
 
 - Issues: GitHub Issues
 - Discussions: GitHub Discussions
-- Documentation: https://agent-harness.readthedocs.io
 
 ## Roadmap
 
