@@ -27,11 +27,13 @@ class AgentCore:
         project_id: str = "default",
         project_name: str | None = None,
         session_id: str | None = None,
+        memory_manager: Any = None,
     ):
         self.provider = provider
         self.project_id = project_id
         self.project_name = project_name
         self.session_id = session_id or str(uuid.uuid4())
+        self.memory_manager = memory_manager
         self.working_memory: list[dict[str, str]] = []
 
     def _add_working_message(self, role: str, content: str) -> None:
@@ -144,7 +146,7 @@ class AgentCore:
                     result = await execute_tool(
                         tool_name=tool_name,
                         tool_args=tool_args,
-                        memory_manager=None,
+                        memory_manager=self.memory_manager,
                         project_id=self.project_id,
                         session_id=self.session_id,
                     )
