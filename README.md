@@ -47,16 +47,17 @@ curl -fsSL .../deploy.sh | bash -s -- --mode local
 curl -fsSL .../deploy.sh | bash -s -- --mode docker
 ```
 
-Once installed, edit `.env` in your install directory and set your LLM credentials:
+Once installed, edit `.env` in your install directory and set your non-sensitive config:
 
 ```bash
 nano ~/pantheon/.env
 ```
 
-Required fields:
-- `LLM_API_KEY`: Your API key (OpenAI, Anthropic, etc.)
+Required fields in `.env`:
 - `LLM_BASE_URL`: Your LLM provider endpoint (or http://ollama:11434/v1 for local)
 - `LLM_MODEL`: Model name (gpt-4o, claude-3-sonnet, llama3, etc.)
+
+> **Important:** API keys and other secrets belong in the encrypted vault, not `.env`. See [Security](#security) below for setup instructions.
 
 ### Starting and Stopping
 
@@ -213,21 +214,27 @@ Stores the agent's core identity, values, and behavioral patterns.
 
 ### Core LLM Configuration
 
+Set the provider endpoint and model in `.env`:
+
 ```env
 # OpenAI (default)
 LLM_BASE_URL=https://api.openai.com/v1
-LLM_API_KEY=sk-your-key-here
 LLM_MODEL=gpt-4o
 
 # Anthropic Claude
 LLM_BASE_URL=https://api.anthropic.com/v1
-LLM_API_KEY=sk-ant-your-key-here
 LLM_MODEL=claude-3-5-sonnet-20241022
 
 # Local Ollama
 LLM_BASE_URL=http://ollama:11434/v1
-LLM_API_KEY=ollama
 LLM_MODEL=llama3
+```
+
+Store the API key in the vault (not `.env`):
+
+```bash
+python -m secrets.setup --migrate   # if migrating from an existing .env
+python -m secrets.setup             # or set interactively
 ```
 
 ### Embedding Configuration
@@ -243,17 +250,97 @@ EMBEDDING_MODEL=nomic-embed-text
 EMBEDDING_BASE_URL=http://ollama:11434/v1
 ```
 
-### Security Configuration
+### Security
 
-```env
-# Generate secure keys:
-# VAULT_MASTER_KEY: openssl rand -hex 16
-# SECRET_KEY: python -c "import secrets; print(secrets.token_hex(32))"
+Pantheon uses an encrypted vault for all sensitive values (API keys, tokens, passwords). The `.env` file contains only non-sensitive configuration like model names, URLs, and ports.
 
-VAULT_MASTER_KEY=your-32-char-hex-string
-SECRET_KEY=your-64-char-hex-string
-APP_ENV=production
+#### Vault Master Key Setup
+
+The vault master key must live outside the project directory. Choose the method that matches your deployment:
+
+**Bare-metal / systemd (recommended for Linux servers):**
+
+```bash
+# Run as root — generates key and creates systemd EnvironmentFile
+sudo bash deploy/setup-vault-key.sh
+
+# Install the systemd service
+sudo cp deploy/pantheon.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now pantheon
 ```
+
+This creates `/etc/pantheon/vault.key` (root:root, mode 600). The systemd unit reads the key at startup and passes it to the service process via `VAULT_MASTER_KEY`.
+
+**Docker / Docker Compose:**
+
+```bash
+# Create the secrets directory and generate a key
+mkdir -p secrets
+python3 -c "import secrets; print(secrets.token_hex(32))" > secrets/vault_master_key.txt
+
+# Start normally — docker-compose.yml mounts the secret at /run/secrets/
+docker compose up -d
+```
+
+The `secrets/vault_master_key.txt` file is gitignored and never committed.
+
+**Development (no external key needed):**
+
+In dev mode, the vault falls back to a built-in default key automatically. A warning is logged to remind you this is not safe for production.
+
+#### Migrating Secrets into the Vault
+
+If you have an existing `.env` with API keys, migrate them into the vault:
+
+```bash
+cd backend
+
+# Auto-migrate all secrets found in .env
+python -m secrets.setup --migrate
+
+# Or check what's configured vs. what's missing
+python -m secrets.setup --check
+
+# Or run interactively to set secrets one by one
+python -m secrets.setup
+```
+
+After migration, you can remove the secret values from `.env` — the vault is the authoritative source.
+
+#### Authentication
+
+Pantheon supports three auth modes, configured via the vault:
+
+**Password auth (simple, single-user):**
+
+```bash
+# Set via the setup tool or directly in the vault
+python -m secrets.setup
+# → Set auth_password and secret_key when prompted
+```
+
+**OIDC / OAuth2 (recommended for production):**
+
+Supports Google, GitHub, or any OIDC-compliant identity provider. Store the provider credentials in the vault:
+
+```
+oidc_google_client_id       — OAuth client ID from Google Cloud Console
+oidc_google_client_secret   — OAuth client secret
+oidc_google_allowed_emails  — Comma-separated list (optional, open if blank)
+oidc_google_allowed_domains — e.g. "yourcompany.com" (optional)
+```
+
+Replace `google` with `github` for GitHub, or use `custom` for any OIDC provider (also set `oidc_custom_authorize_url`, `oidc_custom_token_url`, etc.).
+
+To register your app with the identity provider, you'll need the callback URL:
+```
+https://your-domain.com/api/auth/oidc/google/callback
+```
+
+**Both:** Password and OIDC can be enabled simultaneously — the login page shows both options.
+
+**No auth:** If neither `auth_password` nor any OIDC provider is configured, the UI is open (not recommended for public servers).
 
 ### CORS Configuration
 
@@ -468,10 +555,17 @@ Agent: "Here are the results..."
    - Follow prompts to create a bot
    - Copy the bot token
 
-2. Update `.env`:
+2. Store the token in the vault:
+
+```bash
+cd backend
+python -m secrets.setup
+# → Set telegram_bot_token when prompted
+```
+
+Then set the allowed chat IDs in `.env`:
 
 ```env
-TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyzABCDEfg
 TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
 ```
 
@@ -613,8 +707,12 @@ pantheon/
 │   ├── personality/            # Agent personality files
 │   └── projects/               # Agent project directories
 │
+├── deploy/
+│   ├── pantheon.service        # systemd unit file
+│   └── setup-vault-key.sh      # First-run vault key provisioning
+│
 ├── docker-compose.yml          # Multi-container orchestration
-├── .env.example                # Environment template
+├── .env.example                # Environment template (non-sensitive only)
 ├── .gitignore                  # Git ignore rules
 ├── Makefile                    # Development commands
 └── README.md                   # This file
@@ -654,13 +752,15 @@ Contributions are welcome! Please:
 - [x] Multi-file upload, download, and in-browser text editing
 - [x] Telegram bot integration for remote control
 - [x] LLM flexibility — any OpenAI-compatible provider (OpenAI, Anthropic, Ollama, etc.)
-- [x] Encrypted secrets vault (Fernet + PBKDF2)
+- [x] Encrypted secrets vault (Fernet + PBKDF2) with isolated master key (`/etc/pantheon/` or Docker secrets)
+- [x] OIDC/OAuth2 authentication (Google, GitHub, custom providers) with JWT sessions
+- [x] Vault-first secret resolution — no credentials in `.env` or user-accessible files
+- [x] systemd service unit with security hardening
 - [x] Full web dashboard — chat, memory browser, files, personality editor, tasks, settings, projects
 
 ### In Progress
 
 - [ ] Multi-agent orchestration — coordinated agents with inter-agent communication
-- [ ] Role-based access control (RBAC) and multi-user auth
 - [ ] Advanced memory consolidation — automatic cross-session summarization and decay
 
 ### Planned
