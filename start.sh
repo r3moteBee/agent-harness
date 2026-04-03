@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Agent Harness (local mode)
+# Start Pantheon (local mode)
 # For Docker mode, use: docker compose up -d
 set -euo pipefail
 
@@ -44,7 +44,7 @@ echo "$FRONTEND_PID" >> "$DIR/.pids"
 success "Frontend started (PID ${FRONTEND_PID}) — logs: $DIR/frontend.log"
 
 echo ""
-echo -e "${BOLD}${GREEN}Agent Harness is running!${RESET}"
+echo -e "${BOLD}${GREEN}Pantheon is running!${RESET}"
 echo -e "  Web UI   → http://localhost:${FRONTEND_PORT}"
 echo -e "  API      → http://localhost:${BACKEND_PORT}"
 echo -e "  API Docs → http://localhost:${BACKEND_PORT}/docs"

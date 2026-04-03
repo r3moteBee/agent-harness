@@ -1,8 +1,8 @@
-# Agent Harness Backend - Complete Index
+# Pantheon Backend - Complete Index
 
 ## Overview
 
-The Agent Harness backend is a production-ready agentic AI framework built with FastAPI, featuring:
+The Pantheon backend is a production-ready agentic AI framework built with FastAPI, featuring:
 - 5-tier memory architecture
 - OpenAI-compatible LLM integration
 - 10 built-in tools
@@ -228,7 +228,7 @@ SECRET_KEY=...
 # Application
 APP_ENV=development
 LOG_LEVEL=INFO
-DATA_DIR=/var/lib/agent-harness
+DATA_DIR=/var/lib/pantheon
 CORS_ORIGINS=http://localhost:3000,...
 
 # Telegram (optional)
@@ -401,7 +401,7 @@ Comprehensive documentation included.
 Ready for integration testing and extension.
 
 For updates to your `/sessions/bold-funny-ride/mnt/outputs/` path, copy files from:
-`/sessions/friendly-happy-maxwell/agent-harness/backend/`
+`/sessions/friendly-happy-maxwell/pantheon/backend/`
 
 ---
 

@@ -2,7 +2,7 @@
 AGENT HARNESS BACKEND - BUILD SUMMARY
 ================================================================================
 
-Location: /sessions/friendly-happy-maxwell/agent-harness/backend/
+Location: /sessions/friendly-happy-maxwell/pantheon/backend/
 
 All 18 core backend files have been built, validated, and are production-ready.
 
@@ -264,7 +264,7 @@ Directories Created:
   - backend/data/personality/
 
 All files are saved to:
-/sessions/friendly-happy-maxwell/agent-harness/backend/
+/sessions/friendly-happy-maxwell/pantheon/backend/
 
 Ready for integration testing and extension.
 ================================================================================

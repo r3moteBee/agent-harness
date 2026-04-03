@@ -10,7 +10,7 @@ up: ## Start all services
 	@cp -n .env.example .env 2>/dev/null || true
 	@mkdir -p data/db data/chroma data/personality data/projects data/workspace
 	docker compose up -d
-	@echo "✅ Agent Harness running at http://localhost"
+	@echo "✅ Pantheon running at http://localhost"
 	@echo "   Frontend: http://localhost:3000"
 	@echo "   Backend API: http://localhost:8000"
 	@echo "   API Docs: http://localhost:8000/docs"

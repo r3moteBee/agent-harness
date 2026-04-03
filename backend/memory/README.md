@@ -342,4 +342,4 @@ asyncio.run(test_memory())
 
 ## License
 
-Part of the agent-harness project.
+Part of the pantheon project.

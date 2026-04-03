@@ -21,4 +21,4 @@ pkill -9 -f "uvicorn main:app" 2>/dev/null || true
 for PORT in 8000 3000; do
   for _ in 1 2 3 4 5; do lsof -ti ":$PORT" &>/dev/null || break; sleep 1; done
 done
-success "Agent Harness stopped."
+success "Pantheon stopped."

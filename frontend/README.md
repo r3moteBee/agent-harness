@@ -1,6 +1,6 @@
-# Agent Harness Frontend
+# Pantheon Frontend
 
-A modern React + Vite + Tailwind CSS interface for the Agent Harness AI agent framework.
+A modern React + Vite + Tailwind CSS interface for the Pantheon AI agent framework.
 
 ## Features
 
@@ -120,8 +120,8 @@ npm run preview
 Build and run in Docker:
 
 ```bash
-docker build -t agent-harness-frontend .
-docker run -p 80:80 agent-harness-frontend
+docker build -t pantheon-frontend .
+docker run -p 80:80 pantheon-frontend
 ```
 
 The app will be available at `http://localhost`.
@@ -360,4 +360,4 @@ Mobile-first responsive design:
 
 ## License
 
-Part of the Agent Harness project.
+Part of the Pantheon project.

@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { ChevronRight, Download, Trash2, FolderPlus, Upload, File, Folder, ArrowLeft, RefreshCw } from 'lucide-react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { ChevronRight, Download, Trash2, FolderPlus, Upload, File, Folder, ArrowLeft, RefreshCw, CheckCircle, AlertCircle, Pencil, Save } from 'lucide-react'
 import { useStore } from '../store'
 import { filesApi } from '../api/client'
 
@@ -12,16 +12,23 @@ export default function FileRepository() {
   const fileInputRef = useRef(null)
   const [folderName, setFolderName] = useState('')
   const [showNewFolder, setShowNewFolder] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState(null) // { count, errors }
+  const [editing, setEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
 
   const activeProject = useStore((s) => s.activeProject)
   const addNotification = useStore((s) => s.addNotification)
 
+  const projectId = activeProject?.id || 'default'
+
   const loadFiles = async (path = '') => {
     setLoading(true)
     try {
-      const res = await filesApi.list(activeProject?.id || 'default', path)
-      // API returns { directories: [...], files: [...] } — merge into one list,
-      // directories first, then files, each tagged with is_dir.
+      const res = await filesApi.list(projectId, path)
       const dirs  = (res.data.directories || []).map(d => ({ ...d, is_dir: true }))
       const files = (res.data.files      || []).map(f => ({ ...f, is_dir: false }))
       setItems([...dirs, ...files])
@@ -38,14 +45,20 @@ export default function FileRepository() {
     loadFiles()
   }, [activeProject])
 
+  // Clear upload status after a few seconds
+  useEffect(() => {
+    if (uploadStatus) {
+      const timer = setTimeout(() => setUploadStatus(null), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [uploadStatus])
+
   const getBreadcrumbs = () => {
     if (!currentPath) return []
     return currentPath.split('/').filter(p => p)
   }
 
-  const navigateTo = (path) => {
-    loadFiles(path)
-  }
+  const navigateTo = (path) => loadFiles(path)
 
   const openFolder = (name) => {
     const newPath = currentPath ? `${currentPath}/${name}` : name
@@ -56,16 +69,14 @@ export default function FileRepository() {
     if (!currentPath) return
     const parts = currentPath.split('/')
     parts.pop()
-    const newPath = parts.join('/')
-    navigateTo(newPath)
+    navigateTo(parts.join('/'))
   }
 
   const deleteItem = async (name, isFolder) => {
     if (!confirm(`Delete ${isFolder ? 'folder' : 'file'} "${name}"?`)) return
-
     const path = currentPath ? `${currentPath}/${name}` : name
     try {
-      await filesApi.delete(path, activeProject?.id || 'default')
+      await filesApi.delete(path, projectId)
       addNotification({ type: 'success', message: 'Deleted successfully' })
       loadFiles(currentPath)
     } catch (err) {
@@ -76,29 +87,71 @@ export default function FileRepository() {
   const previewTextFile = async (name) => {
     const path = currentPath ? `${currentPath}/${name}` : name
     try {
-      const res = await filesApi.read(path, activeProject?.id || 'default')
+      const res = await filesApi.read(path, projectId)
       setFileContent(res.data.content)
       setPreviewFile(name)
+      setEditing(false)
+      setDirty(false)
     } catch (err) {
       addNotification({ type: 'error', message: err.message })
     }
   }
 
-  const uploadFile = async (file) => {
+  const startEditing = () => {
+    setEditContent(fileContent)
+    setEditing(true)
+    setDirty(false)
+  }
+
+  const cancelEditing = () => {
+    if (dirty && !confirm('Discard unsaved changes?')) return
+    setEditing(false)
+    setDirty(false)
+  }
+
+  const saveFile = async () => {
+    if (!previewFile) return
+    const path = currentPath ? `${currentPath}/${previewFile}` : previewFile
+    setSaving(true)
     try {
-      await filesApi.upload(file, activeProject?.id || 'default', currentPath)
-      addNotification({ type: 'success', message: 'File uploaded' })
+      await filesApi.write(path, editContent, projectId)
+      setFileContent(editContent)
+      setEditing(false)
+      setDirty(false)
+      addNotification({ type: 'success', message: 'File saved' })
       loadFiles(currentPath)
     } catch (err) {
       addNotification({ type: 'error', message: err.message })
     }
+    setSaving(false)
   }
+
+  const uploadFiles = useCallback(async (fileList) => {
+    if (!fileList || fileList.length === 0) return
+
+    setUploading(true)
+    setUploadStatus(null)
+    try {
+      if (fileList.length === 1) {
+        await filesApi.upload(fileList[0], projectId, currentPath)
+      } else {
+        await filesApi.uploadMultiple(Array.from(fileList), projectId, currentPath)
+      }
+      setUploadStatus({ count: fileList.length, errors: 0 })
+      addNotification({ type: 'success', message: `${fileList.length} file${fileList.length > 1 ? 's' : ''} uploaded` })
+      loadFiles(currentPath)
+    } catch (err) {
+      setUploadStatus({ count: 0, errors: fileList.length })
+      addNotification({ type: 'error', message: err.message })
+    }
+    setUploading(false)
+  }, [projectId, currentPath])
 
   const createFolder = async () => {
     if (!folderName.trim()) return
     const path = currentPath ? `${currentPath}/${folderName}` : folderName
     try {
-      await filesApi.mkdir(path, activeProject?.id || 'default')
+      await filesApi.mkdir(path, projectId)
       addNotification({ type: 'success', message: 'Folder created' })
       setFolderName('')
       setShowNewFolder(false)
@@ -109,8 +162,41 @@ export default function FileRepository() {
   }
 
   const isTextFile = (name) => {
-    const exts = ['.txt', '.md', '.json', '.js', '.py', '.html', '.css', '.yml', '.yaml']
+    const exts = ['.txt', '.md', '.json', '.js', '.py', '.html', '.css', '.yml', '.yaml', '.ts', '.jsx', '.tsx', '.toml', '.cfg', '.ini', '.sh', '.env', '.log']
     return exts.some(ext => name.toLowerCase().endsWith(ext))
+  }
+
+  // Drag-and-drop handlers
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+  }, [])
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+    const files = e.dataTransfer.files
+    if (files?.length) uploadFiles(files)
+  }, [uploadFiles])
+
+  const getDownloadUrl = (name) => {
+    const path = currentPath ? `${currentPath}/${name}` : name
+    return filesApi.downloadUrl(path, projectId)
+  }
+
+  const formatSize = (bytes) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   return (
@@ -136,7 +222,12 @@ export default function FileRepository() {
                 </button>
               )}
               <div className="flex items-center gap-1 text-sm text-gray-400">
-                <span>/</span>
+                <button
+                  onClick={() => navigateTo('')}
+                  className="hover:text-brand-300"
+                >
+                  /
+                </button>
                 {getBreadcrumbs().map((part, i, arr) => (
                   <React.Fragment key={i}>
                     <button
@@ -155,13 +246,14 @@ export default function FileRepository() {
             </div>
 
             {/* Action buttons */}
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg"
+                disabled={uploading}
+                className="flex items-center gap-2 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg disabled:opacity-50"
               >
                 <Upload className="w-4 h-4" />
-                Upload
+                {uploading ? 'Uploading...' : 'Upload Files'}
               </button>
               <button
                 onClick={() => setShowNewFolder(!showNewFolder)}
@@ -175,18 +267,33 @@ export default function FileRepository() {
                 disabled={loading}
                 className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg disabled:opacity-50"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               </button>
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 onChange={(e) => {
-                  if (e.target.files?.[0]) {
-                    uploadFile(e.target.files[0])
+                  if (e.target.files?.length) {
+                    uploadFiles(e.target.files)
+                    e.target.value = ''   // reset so same files can be re-selected
                   }
                 }}
                 className="hidden"
               />
+
+              {/* Upload status indicator */}
+              {uploadStatus && (
+                <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded ${
+                  uploadStatus.errors ? 'text-red-400 bg-red-900/30' : 'text-green-400 bg-green-900/30'
+                }`}>
+                  {uploadStatus.errors ? (
+                    <><AlertCircle className="w-3.5 h-3.5" /> Upload failed</>
+                  ) : (
+                    <><CheckCircle className="w-3.5 h-3.5" /> {uploadStatus.count} file{uploadStatus.count > 1 ? 's' : ''} uploaded</>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* New folder form */}
@@ -217,18 +324,40 @@ export default function FileRepository() {
             )}
           </div>
 
-          {/* File list */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin">
-            {items.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                No files or folders
+          {/* File list with drag-and-drop */}
+          <div
+            className={`flex-1 overflow-y-auto scrollbar-thin relative transition-colors ${
+              dragOver ? 'bg-brand-900/20' : ''
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {/* Drag overlay */}
+            {dragOver && (
+              <div className="absolute inset-0 flex items-center justify-center bg-brand-900/30 border-2 border-dashed border-brand-500 rounded-lg z-10 pointer-events-none">
+                <div className="text-center">
+                  <Upload className="w-10 h-10 text-brand-400 mx-auto mb-2" />
+                  <p className="text-brand-300 text-sm font-medium">Drop files here to upload</p>
+                </div>
+              </div>
+            )}
+
+            {items.length === 0 && !loading ? (
+              <div
+                className="flex flex-col items-center justify-center h-full text-gray-500 gap-3 cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="w-8 h-8 text-gray-600" />
+                <p>No files or folders</p>
+                <p className="text-xs text-gray-600">Click to upload or drag and drop files here</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-800">
                 {items.map((item) => (
                   <div key={item.name} className="flex items-center gap-3 px-6 py-3 hover:bg-gray-800 transition-colors group">
                     <button
-                      onClick={() => item.is_dir ? openFolder(item.name) : previewTextFile(item.name)}
+                      onClick={() => item.is_dir ? openFolder(item.name) : (isTextFile(item.name) ? previewTextFile(item.name) : null)}
                       className="flex-1 flex items-center gap-3 min-w-0"
                     >
                       {item.is_dir ? (
@@ -237,22 +366,21 @@ export default function FileRepository() {
                         <File className="w-4 h-4 text-gray-400 flex-shrink-0" />
                       )}
                       <span className="text-sm text-gray-300 truncate">{item.name}</span>
-                      {!item.is_dir && item.size && (
+                      {!item.is_dir && item.size != null && (
                         <span className="text-xs text-gray-600 flex-shrink-0">
-                          {(item.size / 1024).toFixed(1)} KB
+                          {formatSize(item.size)}
                         </span>
                       )}
                     </button>
 
+                    {/* Download button — always visible for files */}
                     {!item.is_dir && (
                       <a
-                        href={filesApi.downloadUrl(
-                          currentPath ? `${currentPath}/${item.name}` : item.name,
-                          activeProject?.id || 'default'
-                        )}
+                        href={getDownloadUrl(item.name)}
                         download
-                        className="p-1 text-gray-500 hover:text-green-400 opacity-0 group-hover:opacity-100"
-                        title="Download"
+                        className="p-1.5 text-gray-500 hover:text-green-400 rounded hover:bg-gray-700"
+                        title={`Download ${item.name}`}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <Download className="w-4 h-4" />
                       </a>
@@ -260,7 +388,7 @@ export default function FileRepository() {
 
                     <button
                       onClick={() => deleteItem(item.name, item.is_dir)}
-                      className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100"
+                      className="p-1.5 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 rounded hover:bg-gray-700"
                       title="Delete"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -272,25 +400,106 @@ export default function FileRepository() {
           </div>
         </div>
 
-        {/* Preview pane */}
+        {/* Preview / Edit pane */}
         {previewFile && fileContent !== null && (
           <div className="w-96 flex flex-col border-l border-gray-800 bg-gray-900">
-            <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-300 truncate">{previewFile}</p>
-              <button
-                onClick={() => {
-                  setPreviewFile(null)
-                  setFileContent(null)
-                }}
-                className="p-1 text-gray-500 hover:text-gray-300"
-              >
-                <X className="w-4 h-4" />
-              </button>
+            <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <p className="text-sm font-medium text-gray-300 truncate">{previewFile}</p>
+                {dirty && <span className="text-xs text-yellow-500 flex-shrink-0">unsaved</span>}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {editing ? (
+                  <>
+                    <button
+                      onClick={saveFile}
+                      disabled={saving}
+                      className="p-1 text-green-500 hover:text-green-400 rounded hover:bg-gray-800 disabled:opacity-50"
+                      title="Save (Ctrl+S)"
+                    >
+                      <Save className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={cancelEditing}
+                      className="p-1 text-gray-500 hover:text-gray-300 rounded hover:bg-gray-800"
+                      title="Cancel editing"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {isTextFile(previewFile) && (
+                      <button
+                        onClick={startEditing}
+                        className="p-1 text-gray-500 hover:text-brand-400 rounded hover:bg-gray-800"
+                        title="Edit file"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+                    <a
+                      href={getDownloadUrl(previewFile)}
+                      download
+                      className="p-1 text-gray-500 hover:text-green-400 rounded hover:bg-gray-800"
+                      title="Download"
+                    >
+                      <Download className="w-4 h-4" />
+                    </a>
+                    <button
+                      onClick={() => {
+                        setPreviewFile(null)
+                        setFileContent(null)
+                        setEditing(false)
+                        setDirty(false)
+                      }}
+                      className="p-1 text-gray-500 hover:text-gray-300"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto scrollbar-thin">
-              <pre className="p-4 text-xs text-gray-300 whitespace-pre-wrap break-words">
-                {fileContent}
-              </pre>
+              {editing ? (
+                <textarea
+                  value={editContent}
+                  onChange={(e) => {
+                    setEditContent(e.target.value)
+                    setDirty(true)
+                  }}
+                  onKeyDown={(e) => {
+                    // Ctrl/Cmd+S to save
+                    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                      e.preventDefault()
+                      saveFile()
+                    }
+                    // Escape to cancel
+                    if (e.key === 'Escape') cancelEditing()
+                    // Tab inserts spaces instead of moving focus
+                    if (e.key === 'Tab') {
+                      e.preventDefault()
+                      const start = e.target.selectionStart
+                      const end = e.target.selectionEnd
+                      const val = e.target.value
+                      setEditContent(val.substring(0, start) + '  ' + val.substring(end))
+                      setDirty(true)
+                      // Restore cursor after React re-renders
+                      requestAnimationFrame(() => {
+                        e.target.selectionStart = e.target.selectionEnd = start + 2
+                      })
+                    }
+                  }}
+                  className="w-full h-full p-4 bg-gray-950 text-xs text-gray-300 font-mono resize-none focus:outline-none border-none"
+                  spellCheck={false}
+                  autoFocus
+                />
+              ) : (
+                <pre className="p-4 text-xs text-gray-300 whitespace-pre-wrap break-words">
+                  {fileContent}
+                </pre>
+              )}
             </div>
           </div>
         )}

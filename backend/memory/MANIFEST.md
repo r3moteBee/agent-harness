@@ -324,7 +324,7 @@ history = await manager.episodic.get_task_logs(task_id="t123")
 
 ## License & Attribution
 
-Part of the agent-harness project.
+Part of the pantheon project.
 
 ---
 

@@ -79,6 +79,18 @@ export const memoryApi = {
     api.delete(`/api/memory/graph/nodes/${nodeId}`, { params: { project_id: projectId } }),
   deleteGraphEdge: (edgeId, projectId) =>
     api.delete(`/api/memory/graph/edges/${edgeId}`, { params: { project_id: projectId } }),
+  listArchivalNotes: (projectId) =>
+    api.get('/api/memory/archival/notes', { params: { project_id: projectId } }),
+  readArchivalNote: (filename, projectId) =>
+    api.get(`/api/memory/archival/notes/${encodeURIComponent(filename)}`, { params: { project_id: projectId } }),
+  createArchivalNote: (content, projectId) =>
+    api.post('/api/memory/archival/notes', { content }, { params: { project_id: projectId } }),
+  deleteArchivalNote: (filename, projectId) =>
+    api.delete(`/api/memory/archival/notes/${encodeURIComponent(filename)}`, { params: { project_id: projectId } }),
+  getArchivalSummary: (projectId) =>
+    api.get('/api/memory/archival/summary', { params: { project_id: projectId } }),
+  updateArchivalSummary: (content, projectId) =>
+    api.put('/api/memory/archival/summary', { content }, { params: { project_id: projectId } }),
   consolidate: (projectId, sessionId) =>
     api.post('/api/memory/consolidate', null, { params: { project_id: projectId, session_id: sessionId } }),
 }
@@ -89,6 +101,8 @@ export const filesApi = {
     api.get('/api/files', { params: { project_id: projectId, path } }),
   read: (path, projectId) =>
     api.get('/api/files/read', { params: { path, project_id: projectId } }),
+  write: (path, content, projectId) =>
+    api.put('/api/files/write', { content }, { params: { path, project_id: projectId } }),
   upload: (file, projectId, path = '') => {
     const formData = new FormData()
     formData.append('file', file)
@@ -97,12 +111,25 @@ export const filesApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
+  uploadMultiple: (files, projectId, path = '') => {
+    const formData = new FormData()
+    for (const file of files) {
+      formData.append('files', file)
+    }
+    return api.post('/api/files/upload-multiple', formData, {
+      params: { project_id: projectId, path },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
   delete: (path, projectId) =>
     api.delete('/api/files', { params: { path, project_id: projectId } }),
   mkdir: (path, projectId) =>
     api.post('/api/files/mkdir', null, { params: { path, project_id: projectId } }),
-  downloadUrl: (path, projectId) =>
-    `${BASE_URL}/api/files/download?path=${encodeURIComponent(path)}&project_id=${encodeURIComponent(projectId)}`,
+  downloadUrl: (path, projectId) => {
+    const token = localStorage.getItem('auth_token')
+    const tokenParam = token && token !== 'no-auth' ? `&token=${encodeURIComponent(token)}` : ''
+    return `${BASE_URL}/api/files/download?path=${encodeURIComponent(path)}&project_id=${encodeURIComponent(projectId)}${tokenParam}`
+  },
 }
 
 // Settings API

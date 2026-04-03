@@ -248,6 +248,96 @@ async def get_related_nodes(
     return {"node_id": node_id, "related": related, "count": len(related)}
 
 
+@router.get("/memory/archival/notes")
+async def list_archival_notes(
+    project_id: str = Query(default="default"),
+) -> dict[str, Any]:
+    """List all archival notes for a project."""
+    from memory.archival import ArchivalMemory
+    from config import get_settings
+    s = get_settings()
+    arch = ArchivalMemory(project_id=project_id, base_dir=str(s.data_dir))
+    notes = await arch.list_notes()
+    return {"notes": notes, "count": len(notes)}
+
+
+@router.get("/memory/archival/notes/{filename}")
+async def read_archival_note(
+    filename: str,
+    project_id: str = Query(default="default"),
+) -> dict[str, Any]:
+    """Read the content of an archival note."""
+    from memory.archival import ArchivalMemory
+    from config import get_settings
+    s = get_settings()
+    arch = ArchivalMemory(project_id=project_id, base_dir=str(s.data_dir))
+    content = await arch.read_file(f"notes/{filename}")
+    if content.startswith("File not found") or content.startswith("Error reading"):
+        raise HTTPException(status_code=404, detail=content)
+    return {"filename": filename, "content": content}
+
+
+@router.post("/memory/archival/notes")
+async def create_archival_note(
+    body: dict[str, Any],
+    project_id: str = Query(default="default"),
+) -> dict[str, Any]:
+    """Create a new archival note."""
+    content = body.get("content", "")
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="Note content cannot be empty")
+    from memory.archival import ArchivalMemory
+    from config import get_settings
+    s = get_settings()
+    arch = ArchivalMemory(project_id=project_id, base_dir=str(s.data_dir))
+    filename = await arch.append_note(content)
+    return {"status": "created", "filename": filename}
+
+
+@router.delete("/memory/archival/notes/{filename}")
+async def delete_archival_note(
+    filename: str,
+    project_id: str = Query(default="default"),
+) -> dict[str, str]:
+    """Delete an archival note."""
+    from memory.archival import ArchivalMemory
+    from config import get_settings
+    s = get_settings()
+    arch = ArchivalMemory(project_id=project_id, base_dir=str(s.data_dir))
+    deleted = await arch.delete_file(f"notes/{filename}")
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"status": "deleted", "filename": filename}
+
+
+@router.get("/memory/archival/summary")
+async def get_archival_summary(
+    project_id: str = Query(default="default"),
+) -> dict[str, Any]:
+    """Get the project summary from archival memory."""
+    from memory.archival import ArchivalMemory
+    from config import get_settings
+    s = get_settings()
+    arch = ArchivalMemory(project_id=project_id, base_dir=str(s.data_dir))
+    content = await arch.get_project_summary()
+    return {"content": content, "project_id": project_id}
+
+
+@router.put("/memory/archival/summary")
+async def update_archival_summary(
+    body: dict[str, Any],
+    project_id: str = Query(default="default"),
+) -> dict[str, str]:
+    """Update the project summary in archival memory."""
+    content = body.get("content", "")
+    from memory.archival import ArchivalMemory
+    from config import get_settings
+    s = get_settings()
+    arch = ArchivalMemory(project_id=project_id, base_dir=str(s.data_dir))
+    await arch.update_project_summary(content)
+    return {"status": "updated", "project_id": project_id}
+
+
 @router.post("/memory/consolidate")
 async def consolidate_session(
     project_id: str = Query(default="default"),

@@ -409,7 +409,7 @@ Security:             ✓ SECURE BY DEFAULT
 Performance:          ✓ OPTIMIZED FOR ALL TIERS
 
 All 5 memory tiers are fully implemented, tested, and documented.
-The system is ready for immediate integration into agent-harness.
+The system is ready for immediate integration into pantheon.
 
 TOTAL LINES OF PRODUCTION CODE: 1,384
 TOTAL LINES OF DOCUMENTATION: ~600

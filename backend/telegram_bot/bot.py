@@ -79,7 +79,7 @@ async def start_telegram_bot(*, raise_on_error: bool = False) -> None:
                 return
             project = _active_project(update.effective_chat.id)
             await update.message.reply_text(
-                "Hello! I'm your Agent Harness AI assistant.\n\n"
+                "Hello! I'm your Pantheon AI assistant.\n\n"
                 "Commands:\n"
                 "/project <name> — Switch active project\n"
                 "/projects — List available projects\n"
@@ -145,7 +145,7 @@ async def start_telegram_bot(*, raise_on_error: bool = False) -> None:
             from tasks.scheduler import list_jobs
             project = _active_project(update.effective_chat.id)
             jobs = list_jobs()
-            status = f"Agent Harness Online\nProject: {project}\nScheduled tasks: {len(jobs)}"
+            status = f"Pantheon Online\nProject: {project}\nScheduled tasks: {len(jobs)}"
             if jobs:
                 for j in jobs[:5]:
                     status += f"\n• {j['name']} (next: {j['next_run'] or 'N/A'})"

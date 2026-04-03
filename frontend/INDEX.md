@@ -1,7 +1,7 @@
-# Agent Harness Frontend - Complete File Index
+# Pantheon Frontend - Complete File Index
 
 **Total Files**: 32  
-**Location**: `/sessions/friendly-happy-maxwell/mnt/outputs/agent-harness/frontend/`
+**Location**: `/sessions/friendly-happy-maxwell/mnt/outputs/pantheon/frontend/`
 
 ## Quick Links
 
@@ -220,8 +220,8 @@ npm run dev
 ### Production
 ```bash
 npm run build
-docker build -t agent-harness-frontend .
-docker run -p 80:80 agent-harness-frontend
+docker build -t pantheon-frontend .
+docker run -p 80:80 pantheon-frontend
 ```
 
 ---
@@ -412,7 +412,7 @@ export default function MyComponent() {
 3. Visit http://localhost:5173
 4. Create a project
 5. Configure your LLM
-6. Start using Agent Harness!
+6. Start using Pantheon!
 
 ---
 

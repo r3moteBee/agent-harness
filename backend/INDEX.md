@@ -1,7 +1,7 @@
-# Agent Harness Backend - Complete Index
+# Pantheon Backend - Complete Index
 
 ## Overview
-This is the complete, production-ready backend for the Agent Harness project. All 1,533 lines of code are complete with full type hints, error handling, and async/await patterns. Zero TODOs or stubs.
+This is the complete, production-ready backend for the Pantheon project. All 1,533 lines of code are complete with full type hints, error handling, and async/await patterns. Zero TODOs or stubs.
 
 ## Directory Structure
 
@@ -128,14 +128,14 @@ All memory tiers fully supported with CRUD operations:
 ### Docker
 ```bash
 # Build
-docker build -t agent-harness -f Dockerfile .
+docker build -t pantheon -f Dockerfile .
 
 # Run
 docker run -p 8000:8000 \
   -e LLM_API_KEY=sk-... \
   -e TELEGRAM_BOT_TOKEN=... \
   -v /data:/app/data \
-  agent-harness
+  pantheon
 ```
 
 ### Environment Variables

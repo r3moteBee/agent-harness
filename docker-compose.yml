@@ -3,7 +3,7 @@ version: '3.9'
 services:
   backend:
     build: ./backend
-    container_name: agent-harness-backend
+    container_name: pantheon-backend
     ports:
       - "8000:8000"
     env_file: .env
@@ -20,7 +20,7 @@ services:
 
   frontend:
     build: ./frontend
-    container_name: agent-harness-frontend
+    container_name: pantheon-frontend
     ports:
       - "3000:80"
     depends_on:
@@ -31,7 +31,7 @@ services:
 
   chromadb:
     image: chromadb/chroma:latest
-    container_name: agent-harness-chroma
+    container_name: pantheon-chroma
     ports:
       - "8001:8000"
     volumes:
@@ -46,7 +46,7 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: agent-harness-nginx
+    container_name: pantheon-nginx
     ports:
       - "80:80"
     volumes:
@@ -60,7 +60,7 @@ services:
 
   # ollama:
   #   image: ollama/ollama:latest
-  #   container_name: agent-harness-ollama
+  #   container_name: pantheon-ollama
   #   ports:
   #     - "11434:11434"
   #   volumes:

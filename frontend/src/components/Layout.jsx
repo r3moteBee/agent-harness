@@ -91,7 +91,7 @@ export default function Layout() {
             <Bot className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-white text-sm">Agent Harness</h1>
+            <h1 className="font-bold text-white text-sm">Pantheon</h1>
             <p className="text-xs text-gray-500">AI Agent Framework</p>
           </div>
           <button
@@ -182,7 +182,7 @@ export default function Layout() {
             <Menu className="w-5 h-5" />
           </button>
           <Bot className="w-5 h-5 text-brand-500" />
-          <span className="font-semibold text-white text-sm">Agent Harness</span>
+          <span className="font-semibold text-white text-sm">Pantheon</span>
         </header>
 
         {/* Page content */}

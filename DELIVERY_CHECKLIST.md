@@ -1,4 +1,4 @@
-# Agent Harness Backend - Delivery Checklist
+# Pantheon Backend - Delivery Checklist
 
 ## Files Delivered
 

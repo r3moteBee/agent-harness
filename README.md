@@ -1,6 +1,6 @@
-# Agent Harness
+# Pantheon
 
-Agent Harness is a self-hosted, production-ready agentic AI framework with a 5-tier memory system, project isolation, autonomous task scheduling, and a polished web UI.
+Pantheon is a self-hosted, production-ready agentic AI framework with a 5-tier memory system, project isolation, autonomous task scheduling, and a polished web UI.
 
 ## Features
 
@@ -34,7 +34,7 @@ Agent Harness is a self-hosted, production-ready agentic AI framework with a 5-t
 The easiest way to install is with the one-line installer, which handles cloning, dependencies, and configuration automatically. It will ask whether you want **local mode** (no Docker) or **Docker mode** at the start.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/r3moteBee/agent-harness/main/deploy.sh | bash
+curl -fsSL https://raw.githubusercontent.com/r3moteBee/pantheon/main/deploy.sh | bash
 ```
 
 To skip the prompt, pass `--mode` directly:
@@ -50,7 +50,7 @@ curl -fsSL .../deploy.sh | bash -s -- --mode docker
 Once installed, edit `.env` in your install directory and set your LLM credentials:
 
 ```bash
-nano ~/agent-harness/.env
+nano ~/pantheon/.env
 ```
 
 Required fields:
@@ -63,8 +63,8 @@ Required fields:
 **Local mode:**
 
 ```bash
-~/agent-harness/start.sh   # start backend + frontend
-~/agent-harness/stop.sh    # stop all processes
+~/pantheon/start.sh   # start backend + frontend
+~/pantheon/stop.sh    # stop all processes
 ```
 
 - Web UI: http://localhost:3000
@@ -73,7 +73,7 @@ Required fields:
 **Docker mode:**
 
 ```bash
-cd ~/agent-harness
+cd ~/pantheon
 make up        # build images and start all services
 make down      # stop all services
 make logs      # tail logs for all services
@@ -101,7 +101,7 @@ To set up HTTPS after an existing install:
 sudo apt-get install -y caddy
 
 # Copy and edit the included Caddyfile
-sudo cp ~/agent-harness/Caddyfile /etc/caddy/Caddyfile
+sudo cp ~/pantheon/Caddyfile /etc/caddy/Caddyfile
 # Edit /etc/caddy/Caddyfile and replace {$DOMAIN:localhost} with your domain
 
 # Start Caddy
@@ -149,7 +149,7 @@ Caddy will automatically obtain and renew TLS certificates. No manual cert manag
 
 ## Memory System
 
-Agent Harness implements a comprehensive 5-tier memory architecture:
+Pantheon implements a comprehensive 5-tier memory architecture:
 
 ### 1. Episodic Memory
 
@@ -542,7 +542,7 @@ make lint
 ## Project Structure
 
 ```
-agent-harness/
+pantheon/
 ├── backend/
 │   ├── main.py                 # FastAPI application entry point
 │   ├── requirements.txt         # Python dependencies
@@ -642,11 +642,31 @@ Contributions are welcome! Please:
 
 ## Roadmap
 
-- [x] Multi-agent orchestration
-- [x] 5-tier memory system
-- [x] Web UI dashboard
-- [ ] GPU-accelerated embeddings
-- [ ] Multi-modal input (images, audio)
-- [ ] Advanced memory consolidation
-- [ ] Distributed agent deployment
-- [ ] Custom fine-tuning pipeline
+### Shipped
+
+- [x] 5-tier memory system (working, episodic, semantic, graph, archival)
+- [x] Cross-tier memory recall with optional reranker
+- [x] Session consolidation via prefill model
+- [x] ChromaDB vector search for semantic memory
+- [x] Project isolation with per-project workspaces and personalities
+- [x] Real-time WebSocket chat streaming with tool-call visualization
+- [x] Autonomous task scheduling (one-shot, interval, and cron)
+- [x] Multi-file upload, download, and in-browser text editing
+- [x] Telegram bot integration for remote control
+- [x] LLM flexibility — any OpenAI-compatible provider (OpenAI, Anthropic, Ollama, etc.)
+- [x] Encrypted secrets vault (Fernet + PBKDF2)
+- [x] Full web dashboard — chat, memory browser, files, personality editor, tasks, settings, projects
+
+### In Progress
+
+- [ ] Multi-agent orchestration — coordinated agents with inter-agent communication
+- [ ] Role-based access control (RBAC) and multi-user auth
+- [ ] Advanced memory consolidation — automatic cross-session summarization and decay
+
+### Planned
+
+- [ ] Multi-modal input (images, audio, documents in chat)
+- [ ] GPU-accelerated local embeddings
+- [ ] Distributed agent deployment and horizontal scaling
+- [ ] Plugin / tool marketplace
+- [ ] Custom fine-tuning pipeline integration

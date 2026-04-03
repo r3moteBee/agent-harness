@@ -219,7 +219,7 @@ For more help, see **[QUICK_START.md](QUICK_START.md)** troubleshooting section.
 
 1. Copy `memory/` directory to your backend:
    ```bash
-   cp -r memory/ /path/to/agent-harness/backend/
+   cp -r memory/ /path/to/pantheon/backend/
    ```
 
 2. Install optional ChromaDB (for semantic search):

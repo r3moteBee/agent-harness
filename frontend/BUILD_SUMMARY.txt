@@ -3,7 +3,7 @@ AGENT HARNESS FRONTEND - BUILD SUMMARY
 ================================================================================
 
 PROJECT DIRECTORY:
-/sessions/friendly-happy-maxwell/mnt/outputs/agent-harness/frontend/
+/sessions/friendly-happy-maxwell/mnt/outputs/pantheon/frontend/
 
 TOTAL FILES CREATED: 25+
 
@@ -291,8 +291,8 @@ PRODUCTION BUILD:
   - dist/ folder output
   
 DOCKER:
-  docker build -t agent-harness-frontend .
-  docker run -p 80:80 agent-harness-frontend
+  docker build -t pantheon-frontend .
+  docker run -p 80:80 pantheon-frontend
 
 ================================================================================
 TECHNOLOGIES USED
@@ -374,8 +374,8 @@ DEPLOYMENT INSTRUCTIONS
 ================================================================================
 
 1. DOCKER BUILD & RUN:
-   docker build -t agent-harness-frontend .
-   docker run -p 80:80 agent-harness-frontend
+   docker build -t pantheon-frontend .
+   docker run -p 80:80 pantheon-frontend
 
 2. REVERSE PROXY:
    The frontend runs on port 80 in Docker (handled by nginx)

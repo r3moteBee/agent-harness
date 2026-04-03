@@ -5,7 +5,7 @@
 The memory system is self-contained. Copy the `memory/` directory to your project:
 
 ```bash
-cp -r memory/ /path/to/agent-harness/backend/
+cp -r memory/ /path/to/pantheon/backend/
 ```
 
 ## Basic Usage

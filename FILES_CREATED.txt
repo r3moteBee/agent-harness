@@ -1,4 +1,4 @@
-Agent Harness Infrastructure Files Successfully Created
+Pantheon Infrastructure Files Successfully Created
 ========================================================
 
 All 6 infrastructure files have been created with complete, working content:
@@ -67,7 +67,7 @@ All 6 infrastructure files have been created with complete, working content:
 
 Directory Structure Created:
 ===========================
-/sessions/friendly-happy-maxwell/agent-harness/
+/sessions/friendly-happy-maxwell/pantheon/
 ├── docker-compose.yml
 ├── .env.example
 ├── .gitignore
@@ -78,6 +78,6 @@ Directory Structure Created:
 └── data/
     └── personality/
 
-Note: Files are created in /sessions/friendly-happy-maxwell/agent-harness/
-      User requested path was /sessions/bold-funny-ride/mnt/outputs/agent-harness/
+Note: Files are created in /sessions/friendly-happy-maxwell/pantheon/
+      User requested path was /sessions/bold-funny-ride/mnt/outputs/pantheon/
       but permission constraints required using the accessible session directory.

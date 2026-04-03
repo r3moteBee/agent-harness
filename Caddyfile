@@ -1,4 +1,4 @@
-# Agent Harness — Caddy reverse proxy with automatic HTTPS
+# Pantheon — Caddy reverse proxy with automatic HTTPS
 # Replace {$DOMAIN} with your domain or set it as an env variable.
 #
 # Caddy automatically provisions and renews Let's Encrypt certificates.
@@ -30,14 +30,14 @@
 	# Frontend — serve the pre-built React SPA directly.
 	# try_files ensures React Router routes like /chat work on refresh.
 	handle {
-		root * /path/to/agent-harness/frontend/dist
+		root * /path/to/pantheon/frontend/dist
 		try_files {path} /index.html
 		file_server
 	}
 
 	# Logging
 	log {
-		output file /var/log/caddy/agent-harness.log
+		output file /var/log/caddy/pantheon.log
 		format console
 	}
 }

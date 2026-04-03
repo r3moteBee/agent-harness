@@ -47,7 +47,7 @@ export default function LoginPage({ onLogin }) {
           <div className="w-14 h-14 bg-brand-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
             <Bot className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Agent Harness</h1>
+          <h1 className="text-2xl font-bold text-white">Pantheon</h1>
           <p className="text-sm text-gray-500 mt-1">Enter your password to continue</p>
         </div>
 

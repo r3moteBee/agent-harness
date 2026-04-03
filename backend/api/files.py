@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 import aiofiles
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Body, HTTPException, UploadFile, File, Query
+from typing import List as TList
 from fastapi.responses import FileResponse
 
 from config import get_settings
@@ -115,6 +116,49 @@ async def upload_file(
     }
 
 
+@router.post("/files/upload-multiple")
+async def upload_multiple_files(
+    files: TList[UploadFile] = File(...),
+    project_id: str = Query(default="default"),
+    path: str = Query(default=""),
+) -> dict[str, Any]:
+    """Upload multiple files to the workspace at once."""
+    dest_dir = _safe_path(path, project_id) if path else _get_workspace(project_id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    base = _get_workspace(project_id)
+    results = []
+
+    for file in files:
+        filename = file.filename or "upload"
+        filename = Path(filename).name
+        dest_path = dest_dir / filename
+
+        # Handle filename conflicts
+        if dest_path.exists():
+            stem = dest_path.stem
+            suffix = dest_path.suffix
+            counter = 1
+            while dest_path.exists():
+                dest_path = dest_dir / f"{stem}_{counter}{suffix}"
+                counter += 1
+
+        content = await file.read()
+        async with aiofiles.open(dest_path, "wb") as f:
+            await f.write(content)
+
+        results.append({
+            "filename": dest_path.name,
+            "path": str(dest_path.relative_to(base)),
+            "size": len(content),
+        })
+
+    return {
+        "status": "uploaded",
+        "count": len(results),
+        "files": results,
+    }
+
+
 @router.get("/files/download")
 async def download_file(
     path: str = Query(...),
@@ -150,6 +194,27 @@ async def read_file_content(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/files/write")
+async def write_file_content(
+    path: str = Query(...),
+    project_id: str = Query(default="default"),
+    body: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    """Write text content to an existing or new file in the workspace."""
+    content = body.get("content")
+    if content is None:
+        raise HTTPException(status_code=400, detail="Missing 'content' field")
+    target = _safe_path(path, project_id)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    async with aiofiles.open(target, "w", encoding="utf-8") as f:
+        await f.write(content)
+    return {
+        "status": "saved",
+        "path": path,
+        "size": len(content.encode("utf-8")),
+    }
 
 
 @router.delete("/files")

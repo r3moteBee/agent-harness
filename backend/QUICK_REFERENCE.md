@@ -1,8 +1,8 @@
-# Agent Harness Backend - Quick Reference
+# Pantheon Backend - Quick Reference
 
 ## File Locations
 ```
-/sessions/friendly-happy-maxwell/mnt/outputs/agent-harness/backend/
+/sessions/friendly-happy-maxwell/mnt/outputs/pantheon/backend/
 ├── api/
 │   ├── __init__.py
 │   ├── chat.py           (Chat REST + WebSocket)

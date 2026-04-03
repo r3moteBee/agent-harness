@@ -1,4 +1,4 @@
-# Agent Harness Backend
+# Pantheon Backend
 
 A production-ready agentic AI framework with 5-tier memory, project isolation, and autonomous task execution.
 
@@ -12,7 +12,7 @@ pip install fastapi uvicorn httpx pydantic-settings cryptography
 export LLM_API_KEY="your-api-key"
 export LLM_BASE_URL="https://api.openai.com/v1"
 export LLM_MODEL="gpt-4o"
-export DATA_DIR="/var/lib/agent-harness"
+export DATA_DIR="/var/lib/pantheon"
 
 # Run the server
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -132,7 +132,7 @@ SECRET_KEY=your-secret-key
 # Application
 APP_ENV=development
 LOG_LEVEL=INFO
-DATA_DIR=/var/lib/agent-harness
+DATA_DIR=/var/lib/pantheon
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 
 # Telegram (optional)
@@ -253,4 +253,4 @@ python3 -m py_compile config.py main.py agent/*.py models/*.py secrets/*.py
 
 ## License
 
-Proprietary - Agent Harness Framework
+Proprietary - Pantheon Framework

@@ -235,7 +235,7 @@ All files pass Python syntax validation. Ready for:
 
 All files saved to:
 ```
-/sessions/friendly-happy-maxwell/agent-harness/backend/memory/
+/sessions/friendly-happy-maxwell/pantheon/backend/memory/
 ├── __init__.py
 ├── working.py
 ├── episodic.py
@@ -254,4 +254,4 @@ All files saved to:
 - Documentation: 270 lines
 - Total: 1,554 lines
 
-All code is complete, documented, and ready for immediate integration into the agent-harness project.
+All code is complete, documented, and ready for immediate integration into the pantheon project.

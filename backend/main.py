@@ -44,7 +44,7 @@ _PUBLIC_PATHS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    logger.info("Starting Agent Harness backend...")
+    logger.info("Starting Pantheon backend...")
     settings.ensure_dirs()
 
     # Initialize default personality files if missing or empty
@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
     from telegram_bot.bot import start_telegram_bot, stop_telegram_bot
     await start_telegram_bot()
 
-    logger.info("Agent Harness backend ready")
+    logger.info("Pantheon backend ready")
     import asyncio as _asyncio
     async def _warmup():
         try:
@@ -95,13 +95,13 @@ async def lifespan(app: FastAPI):
         scheduler.shutdown(wait=False)
         logger.info("Task scheduler stopped")
 
-    logger.info("Agent Harness backend shutdown complete")
+    logger.info("Pantheon backend shutdown complete")
 
 
 app = FastAPI(
-    title="Agent Harness",
+    title="Pantheon",
     description="A production-ready agentic AI framework with 5-tier memory, project isolation, and autonomous tasks.",
-    version="2026-04-02-10",
+    version="2026-04-02-11",
     lifespan=lifespan,
 )
 
@@ -173,4 +173,4 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    return {"message": "Agent Harness API", "docs": "/docs"}
+    return {"message": "Pantheon API", "docs": "/docs"}

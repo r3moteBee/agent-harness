@@ -292,9 +292,288 @@ function GraphTab() {
 }
 
 function ArchivalTab() {
+  const [notes, setNotes] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [expandedNote, setExpandedNote] = useState(null)
+  const [noteContent, setNoteContent] = useState('')
+  const [showNewNote, setShowNewNote] = useState(false)
+  const [newNoteText, setNewNoteText] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [summary, setSummary] = useState('')
+  const [showSummary, setShowSummary] = useState(false)
+  const [editingSummary, setEditingSummary] = useState(false)
+  const [summaryDraft, setSummaryDraft] = useState('')
+  const activeProject = useStore((s) => s.activeProject)
+  const addNotification = useStore((s) => s.addNotification)
+  const projectId = activeProject?.id || 'default'
+
+  const loadNotes = async () => {
+    setLoading(true)
+    try {
+      const res = await memoryApi.listArchivalNotes(projectId)
+      setNotes(res.data.notes || [])
+    } catch (err) {
+      addNotification({ type: 'error', message: err.message })
+    }
+    setLoading(false)
+  }
+
+  const loadSummary = async () => {
+    try {
+      const res = await memoryApi.getArchivalSummary(projectId)
+      setSummary(res.data.content || '')
+    } catch (err) {
+      // Summary may not exist yet — that's fine
+      setSummary('')
+    }
+  }
+
+  useEffect(() => {
+    if (activeProject?.id) {
+      loadNotes()
+      loadSummary()
+    }
+  }, [activeProject])
+
+  const filtered = notes.filter(n =>
+    n.filename.toLowerCase().includes(search.toLowerCase()) ||
+    n.path?.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const readNote = async (filename) => {
+    if (expandedNote === filename) {
+      setExpandedNote(null)
+      setNoteContent('')
+      return
+    }
+    try {
+      const res = await memoryApi.readArchivalNote(filename, projectId)
+      setNoteContent(res.data.content || '')
+      setExpandedNote(filename)
+    } catch (err) {
+      addNotification({ type: 'error', message: err.message })
+    }
+  }
+
+  const deleteNote = async (filename) => {
+    if (!confirm(`Delete archival note "${filename}"?`)) return
+    try {
+      await memoryApi.deleteArchivalNote(filename, projectId)
+      setNotes(notes.filter(n => n.filename !== filename))
+      if (expandedNote === filename) {
+        setExpandedNote(null)
+        setNoteContent('')
+      }
+      addNotification({ type: 'success', message: 'Note deleted' })
+    } catch (err) {
+      addNotification({ type: 'error', message: err.message })
+    }
+  }
+
+  const createNote = async () => {
+    if (!newNoteText.trim()) return
+    setCreating(true)
+    try {
+      await memoryApi.createArchivalNote(newNoteText.trim(), projectId)
+      addNotification({ type: 'success', message: 'Note created' })
+      setNewNoteText('')
+      setShowNewNote(false)
+      loadNotes()
+    } catch (err) {
+      addNotification({ type: 'error', message: err.message })
+    }
+    setCreating(false)
+  }
+
+  const saveSummary = async () => {
+    try {
+      await memoryApi.updateArchivalSummary(summaryDraft, projectId)
+      setSummary(summaryDraft)
+      setEditingSummary(false)
+      addNotification({ type: 'success', message: 'Project summary updated' })
+    } catch (err) {
+      addNotification({ type: 'error', message: err.message })
+    }
+  }
+
+  const formatDate = (iso) => {
+    try {
+      return new Date(iso).toLocaleString()
+    } catch {
+      return iso
+    }
+  }
+
+  const formatSize = (bytes) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} B`
+    return `${(bytes / 1024).toFixed(1)} KB`
+  }
+
   return (
-    <div className="text-center py-8">
-      <p className="text-gray-500">Archival memory management coming soon</p>
+    <div className="space-y-6">
+      {/* Project Summary Section */}
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold text-gray-300">Project Summary</h3>
+          <div className="flex gap-1">
+            {editingSummary ? (
+              <>
+                <button
+                  onClick={saveSummary}
+                  className="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditingSummary(false)}
+                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => {
+                  if (!showSummary) {
+                    setShowSummary(true)
+                  } else {
+                    setSummaryDraft(summary)
+                    setEditingSummary(true)
+                  }
+                }}
+                className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded"
+              >
+                {showSummary ? 'Edit' : 'Show'}
+              </button>
+            )}
+            {showSummary && !editingSummary && (
+              <button
+                onClick={() => setShowSummary(false)}
+                className="p-1 text-gray-500 hover:text-gray-300"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+        {showSummary && (
+          editingSummary ? (
+            <textarea
+              value={summaryDraft}
+              onChange={(e) => setSummaryDraft(e.target.value)}
+              className="w-full h-32 bg-gray-900 border border-gray-600 rounded p-3 text-sm text-gray-300 font-mono resize-y focus:outline-none focus:border-brand-500"
+              placeholder="Write a project summary..."
+            />
+          ) : (
+            <div className="text-sm text-gray-400 whitespace-pre-wrap">
+              {summary || <span className="italic text-gray-600">No project summary yet</span>}
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Notes Section */}
+      <div>
+        <div className="flex gap-2 mb-4">
+          <div className="flex-1 relative">
+            <Search className="w-4 h-4 absolute left-3 top-3 text-gray-500" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search archival notes..."
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-500"
+            />
+          </div>
+          <button
+            onClick={() => setShowNewNote(!showNewNote)}
+            className="px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg flex items-center gap-1"
+          >
+            <Plus className="w-4 h-4" />
+            New
+          </button>
+          <button
+            onClick={loadNotes}
+            disabled={loading}
+            className="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-300 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {/* New note form */}
+        {showNewNote && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 mb-4">
+            <textarea
+              value={newNoteText}
+              onChange={(e) => setNewNoteText(e.target.value)}
+              placeholder="Write your note..."
+              className="w-full h-24 bg-gray-900 border border-gray-600 rounded p-3 text-sm text-gray-300 resize-y focus:outline-none focus:border-brand-500 mb-2"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setShowNewNote(false); setNewNoteText('') }}
+                className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createNote}
+                disabled={creating || !newNoteText.trim()}
+                className="px-3 py-1.5 text-sm bg-brand-600 hover:bg-brand-700 text-white rounded disabled:opacity-50"
+              >
+                {creating ? 'Saving...' : 'Save Note'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Notes list */}
+        <div className="space-y-2">
+          {filtered.map(note => (
+            <div key={note.filename} className="bg-gray-800 rounded-lg border border-gray-700">
+              <div className="flex items-center justify-between p-3">
+                <button
+                  onClick={() => readNote(note.filename)}
+                  className="flex-1 flex items-center gap-2 text-left min-w-0"
+                >
+                  {expandedNote === note.filename ? (
+                    <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                  )}
+                  <span className="text-sm text-gray-300 truncate">{note.filename}</span>
+                  <span className="text-xs text-gray-600 flex-shrink-0">{formatSize(note.size)}</span>
+                </button>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  <span className="text-xs text-gray-600">{formatDate(note.modified)}</span>
+                  <button
+                    onClick={() => deleteNote(note.filename)}
+                    className="p-1 text-gray-500 hover:text-red-400 hover:bg-gray-700 rounded"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              {expandedNote === note.filename && (
+                <div className="border-t border-gray-700 p-3">
+                  <pre className="text-xs text-gray-300 whitespace-pre-wrap break-words font-mono">
+                    {noteContent}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <p className="text-center text-gray-600 py-8">
+              {notes.length === 0 ? 'No archival notes yet' : 'No matching notes'}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

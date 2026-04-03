@@ -1,4 +1,4 @@
-# Agent Harness Frontend - Quick Start Guide
+# Pantheon Frontend - Quick Start Guide
 
 ## Setup (5 minutes)
 
@@ -153,4 +153,4 @@ See `README.md` for complete documentation including:
 - Check Network tab to inspect API calls
 - Use Ctrl+K (Cmd+K on Mac) shortcuts in most modern IDEs
 
-Enjoy building with Agent Harness!
+Enjoy building with Pantheon!
