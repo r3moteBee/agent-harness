@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from config import get_settings
-from models.provider import get_provider, get_embedding_provider, get_prefill_provider, get_reranker_provider, reset_provider
+from models.provider import get_provider, get_embedding_provider, get_prefill_provider, get_vision_provider, get_reranker_provider, reset_provider
 from secrets.vault import get_vault
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,9 @@ class SettingsUpdate(BaseModel):
     llm_prefill_model: str | None = None
     prefill_base_url: str | None = None
     prefill_api_key: str | None = None
+    llm_vision_model: str | None = None
+    vision_base_url: str | None = None
+    vision_api_key: str | None = None
     embedding_model: str | None = None
     embedding_base_url: str | None = None
     embedding_api_key: str | None = None
@@ -54,6 +57,9 @@ def _get_effective_settings() -> dict[str, Any]:
         "llm_prefill_model": vault.get_secret("llm_prefill_model") or settings_config.llm_prefill_model,
         "prefill_base_url": vault.get_secret("prefill_base_url") or settings_config.prefill_base_url,
         "prefill_api_key_set": bool(vault.get_secret("prefill_api_key") or settings_config.prefill_api_key),
+        "llm_vision_model": vault.get_secret("llm_vision_model") or settings_config.llm_vision_model,
+        "vision_base_url": vault.get_secret("vision_base_url") or settings_config.vision_base_url,
+        "vision_api_key_set": bool(vault.get_secret("vision_api_key") or settings_config.vision_api_key),
         "embedding_model": vault.get_secret("embedding_model") or settings_config.embedding_model,
         "embedding_base_url": vault.get_secret("embedding_base_url") or settings_config.embedding_base_url,
         "embedding_api_key_set": bool(vault.get_secret("embedding_api_key") or settings_config.embedding_api_key),
@@ -102,6 +108,12 @@ async def update_settings(req: SettingsUpdate) -> dict[str, Any]:
         vault.set_secret("prefill_base_url", req.prefill_base_url)
     if req.prefill_api_key is not None:
         vault.set_secret("prefill_api_key", req.prefill_api_key)
+    if req.llm_vision_model is not None:
+        vault.set_secret("llm_vision_model", req.llm_vision_model)
+    if req.vision_base_url is not None:
+        vault.set_secret("vision_base_url", req.vision_base_url)
+    if req.vision_api_key is not None:
+        vault.set_secret("vision_api_key", req.vision_api_key)
     if req.embedding_model is not None:
         vault.set_secret("embedding_model", req.embedding_model)
     if req.embedding_base_url is not None:
@@ -167,12 +179,14 @@ async def test_connection() -> dict[str, Any]:
     primary = get_provider()
     embedding = get_embedding_provider()
     prefill = get_prefill_provider()
+    vision = get_vision_provider()
     reranker = get_reranker_provider()
 
     results = await asyncio.gather(
         _test_provider("primary", primary),
         _test_provider("embedding", embedding),
         _test_provider("prefill", prefill),
+        _test_provider("vision", vision),
         _test_provider("reranker", reranker),
     )
 
@@ -213,7 +227,8 @@ async def set_secret(key: str, req: SecretUpdate) -> dict[str, str]:
     # Reset provider if it's an LLM-related secret
     if key in ("llm_base_url", "llm_api_key", "llm_model",
                 "embedding_base_url", "embedding_api_key", "embedding_model",
-                "prefill_base_url", "prefill_api_key", "llm_prefill_model"):
+                "prefill_base_url", "prefill_api_key", "llm_prefill_model",
+                "vision_base_url", "vision_api_key", "llm_vision_model"):
         reset_provider()
     return {"status": "set", "key": key}
 
