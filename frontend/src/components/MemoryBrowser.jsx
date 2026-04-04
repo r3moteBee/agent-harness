@@ -156,6 +156,7 @@ function EpisodicTab() {
             <p className="text-center text-gray-600 py-8">No notes found</p>
           )}
         </div>
+      )}
     </div>
   )
 }
