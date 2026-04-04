@@ -214,7 +214,7 @@ class ModelProvider:
 
         except Exception as e:
             logger.error(f"Chat complete error: {e}", exc_info=True)
-            return {"content": f"Error: {e}", "tool_calls": []}
+            raise
 
     async def embed(self, text: str) -> list[float]:
         """Get embedding for text."""

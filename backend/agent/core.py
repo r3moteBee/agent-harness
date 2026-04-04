@@ -188,6 +188,7 @@ class AgentCore:
 
                 if stream:
                     # Streaming mode
+                    stream_error = False
                     async for chunk in self.provider.chat(
                         messages=messages,
                         tools=TOOL_SCHEMAS,
@@ -199,8 +200,13 @@ class AgentCore:
                         elif chunk["type"] == "tool_call":
                             tool_calls_this_round.append(chunk)
                             yield chunk
+                        elif chunk["type"] == "error":
+                            yield chunk
+                            stream_error = True
                         elif chunk["type"] == "done":
                             pass
+                    if stream_error:
+                        break
                 else:
                     # Non-streaming mode
                     response = await self.provider.chat_complete(

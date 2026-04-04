@@ -283,36 +283,42 @@ async def attach_file_to_chat(
 
 
 async def _describe_image(file_path: Path, content: bytes) -> str | None:
-    """Generate a text description of an image using the prefill model.
+    """Generate a text description of an image using a vision-capable model.
 
-    Uses base64 vision if the model supports it, otherwise returns a
-    basic file metadata description.
+    Tries the prefill model first (in case it supports vision), then falls
+    back to the primary model.  Returns a basic metadata string on failure.
     """
-    try:
-        from models.provider import get_prefill_provider
-        provider = get_prefill_provider()
+    from models.provider import get_prefill_provider, get_provider
 
-        b64 = base64.b64encode(content).decode("utf-8")
-        ext = file_path.suffix.lower().lstrip(".")
-        mime = f"image/{ext}" if ext != "jpg" else "image/jpeg"
+    b64 = base64.b64encode(content).decode("utf-8")
+    ext = file_path.suffix.lower().lstrip(".")
+    mime = f"image/{ext}" if ext != "jpg" else "image/jpeg"
 
-        result = await provider.chat_complete([
-            {"role": "system", "content": (
-                "You are a visual analysis assistant. Describe this image concisely "
-                "in 1-3 sentences. Focus on the key content, any text visible, "
-                "diagrams, charts, or notable elements. Be factual and specific."
-            )},
-            {"role": "user", "content": [
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-                {"type": "text", "text": f"Describe this image ({file_path.name}):"},
-            ]},
-        ])
-        desc = (result.get("content") or "").strip()
-        if desc and len(desc) > 10:
-            logger.info("Generated description for %s: %s", file_path.name, desc[:100])
-            return desc
-    except Exception as e:
-        logger.debug("Vision description failed (model may not support images): %s", e)
+    vision_messages = [
+        {"role": "system", "content": (
+            "You are a visual analysis assistant. Describe this image concisely "
+            "in 1-3 sentences. Focus on the key content, any text visible, "
+            "diagrams, charts, or notable elements. Be factual and specific."
+        )},
+        {"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+            {"type": "text", "text": f"Describe this image ({file_path.name}):"},
+        ]},
+    ]
+
+    # Try each provider in order — prefill first, then primary (which may be
+    # a vision model like Qwen2.5-VL)
+    for label, get_prov in [("prefill", get_prefill_provider), ("primary", get_provider)]:
+        try:
+            provider = get_prov()
+            result = await provider.chat_complete(vision_messages)
+            desc = (result.get("content") or "").strip()
+            if desc and len(desc) > 10:
+                logger.info("Generated description for %s via %s: %s", file_path.name, label, desc[:100])
+                return desc
+        except Exception as e:
+            logger.debug("Vision description via %s failed: %s", label, e)
+            continue
 
     # Fallback: basic metadata description
     size_kb = len(content) / 1024
