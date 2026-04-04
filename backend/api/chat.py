@@ -153,11 +153,37 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 session_id=session_id,
             )
 
+            # Save user message to episodic memory
+            try:
+                await memory.episodic.save_message(
+                    session_id=session_id,
+                    project_id=project_id,
+                    role="user",
+                    content=message,
+                )
+            except Exception as e:
+                logger.warning("Failed to save user message to episodic: %s", e)
+
+            full_response = ""
             async for event in agent.chat(message, stream=True):
                 try:
                     await websocket.send_json(event)
                 except Exception:
                     break
+                if event.get("type") == "done":
+                    full_response = event.get("full_response", "")
+
+            # Save assistant response to episodic memory
+            if full_response:
+                try:
+                    await memory.episodic.save_message(
+                        session_id=session_id,
+                        project_id=project_id,
+                        role="assistant",
+                        content=full_response,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to save assistant message to episodic: %s", e)
 
             # Track messages and trigger extraction if interval is set
             extraction_interval = settings.extraction_interval
