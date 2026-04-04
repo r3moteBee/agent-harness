@@ -470,7 +470,7 @@ export default function Chat() {
           </button>
           <button
             onClick={cycleContextFocus}
-            title={`Context focus: ${contextFocus} — click to cycle (broad → balanced → focused)`}
+            title={`Thread focus: ${contextFocus} — controls how strongly recent messages are favoured over older context. Click to cycle: broad → balanced → focused`}
             className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
               contextFocus === 'focused'
                 ? 'bg-amber-900 text-amber-300 hover:bg-amber-800'
@@ -480,11 +480,11 @@ export default function Chat() {
             }`}
           >
             <Target className="w-3 h-3" />
-            {contextFocus.charAt(0).toUpperCase() + contextFocus.slice(1)}
+            <span className="text-gray-500">Focus:</span> {contextFocus.charAt(0).toUpperCase() + contextFocus.slice(1)}
           </button>
           <button
             onClick={cyclePersonalityWeight}
-            title={`Personality: ${personalityWeight} — click to cycle (minimal → balanced → strong)`}
+            title={`Personality presence: ${personalityWeight} — controls how much the agent's identity shows in responses. Click to cycle: minimal → balanced → strong`}
             className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
               personalityWeight === 'strong'
                 ? 'bg-purple-900 text-purple-300 hover:bg-purple-800'
@@ -494,7 +494,7 @@ export default function Chat() {
             }`}
           >
             <UserCircle className="w-3 h-3" />
-            {personalityWeight.charAt(0).toUpperCase() + personalityWeight.slice(1)}
+            <span className="text-gray-500">Persona:</span> {personalityWeight.charAt(0).toUpperCase() + personalityWeight.slice(1)}
           </button>
         </div>
       </div>
