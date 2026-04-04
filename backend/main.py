@@ -41,6 +41,9 @@ _PUBLIC_PATHS = {
     "/api/auth/config",
 }
 
+# Resolve frontend dist directory (used by auth middleware and SPA serving)
+_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -130,6 +133,12 @@ async def auth_middleware(request: Request, call_next):
     if request.url.path in _PUBLIC_PATHS:
         return await call_next(request)
 
+    # Allow frontend static assets and SPA routes through (auth is
+    # enforced by the API endpoints themselves, not the static shell).
+    path = request.url.path
+    if _FRONTEND_DIR.is_dir() and not path.startswith(("/api/", "/ws/")):
+        return await call_next(request)
+
     # WebSocket connections carry the token as a query parameter because
     # the WebSocket API does not support arbitrary headers.
     if request.url.path.startswith("/ws/"):
@@ -175,8 +184,6 @@ async def health_check():
 # ── SPA static file serving (local mode) ──────────────────────────────────────
 # When a frontend/dist directory exists next to the backend, serve it so that
 # local-mode deployments work on a single port without a separate static server.
-_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-
 if _FRONTEND_DIR.is_dir():
     # Serve static assets (JS, CSS, images) at /assets
     _assets_dir = _FRONTEND_DIR / "assets"
