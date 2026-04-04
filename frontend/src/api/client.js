@@ -32,7 +32,7 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
-  config: () => fetch('/api/auth/config').then((r) => r.json()),
+  config: () => api.get('/api/auth/config').then((r) => r.data),
   login: (password) =>
     api.post('/api/auth/login', { password }),
 }
