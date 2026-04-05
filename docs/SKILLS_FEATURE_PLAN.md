@@ -844,12 +844,14 @@ Users should be able to inspect and override scan results. A "quarantined" skill
 
 ---
 
-## 11. Open Questions for Discussion
+## 11. Resolved Design Decisions
 
-1. **Skill scope**: Should skills be global or per-project? Per-project gives isolation but means reinstalling across projects. Proposal: global install, per-project enable/disable.
+1. **Skill scope**: Skills are installed globally and enabled per-project. When Auto-Skill is on and the resolver matches an installed-but-not-enabled skill, the agent can suggest enabling it for the current project: "I found a skill called 'code-review' that looks relevant here, but it's not enabled for this project. Want me to turn it on?" This keeps the library centralized while giving each project explicit control over which skills are active.
 
-2. **Automatic skill discovery**: Should the resolver always check skills, or only when the user explicitly enables "skill mode"? Proposal: always check if any skills are enabled for the project, since the overhead is a single embedding comparison.
+2. **Automatic skill discovery**: Controlled by the per-project Auto-Skill toggle (off / suggest / auto). When off, skills only fire via explicit `/` invocation. Resolved in Section 2.4.
 
-3. **Skill marketplace contribution**: Do we want Pantheon users to be able to publish skills back to hubs? This is a Phase 5+ feature but worth designing the export format now.
+## 12. Open Questions for Discussion
 
-4. **Versioning strategy**: Semantic versioning in skill.json? Or simpler date-based versions? Need to decide how updates from hubs are handled (auto-update vs manual).
+1. **Skill marketplace contribution**: Do we want Pantheon users to be able to publish skills back to hubs? This is a Phase 5+ feature but worth designing the export format now.
+
+2. **Versioning strategy**: Semantic versioning in skill.json? Or simpler date-based versions? Need to decide how updates from hubs are handled (auto-update vs manual).
