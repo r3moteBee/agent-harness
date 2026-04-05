@@ -40,7 +40,7 @@ class MCPClient:
         timeout: float = 30.0,
     ) -> None:
         self.name = name
-        self.url = url.rstrip("/")
+        self.url = url  # Preserve URL as-is (trailing slash matters for some servers)
         self.api_key = api_key
         self.extra_headers = headers or {}
         self.timeout = timeout
