@@ -349,35 +349,36 @@ function ConnectionCard({ conn, onRemove, onTest, onReconnect, onUpdate }) {
             <p className="text-xs text-gray-500">Not connected — no tools discovered. Click the test button to connect.</p>
           )}
 
-          {/* Dev-key throttle toggle */}
-          <div className="flex items-center justify-between pt-2 border-t border-gray-700">
-            <div className="flex items-center gap-2">
+          {/* Request throttle control */}
+          <div className="pt-2 border-t border-gray-700">
+            <div className="flex items-center gap-2 mb-2">
               <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-              <div>
-                <span className="text-xs text-gray-300">Dev-key throttle</span>
-                <p className="text-[10px] text-gray-600">
-                  Slows requests to {conn.request_interval_ms >= 3000 ? '3s' : '1s'} apart — use for free/dev-tier API keys
-                </p>
-              </div>
+              <span className="text-xs text-gray-300">Request throttle</span>
+              <span className="text-[10px] font-mono text-amber-400">{((conn.request_interval_ms || 1000) / 1000).toFixed(1)}s</span>
             </div>
-            <button
-              onClick={async () => {
-                const newInterval = (conn.request_interval_ms || 1000) >= 3000 ? 1000 : 3000
-                try {
-                  await onUpdate(conn.name, { request_interval_ms: newInterval })
-                  addNotification({ type: 'success', message: `Throttle ${newInterval >= 3000 ? 'enabled' : 'disabled'} for ${conn.name}` })
-                } catch (err) {
-                  addNotification({ type: 'error', message: err.message })
-                }
-              }}
-              className={`relative w-9 h-5 rounded-full transition-colors ${
-                (conn.request_interval_ms || 1000) >= 3000 ? 'bg-amber-600' : 'bg-gray-600'
-              }`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                (conn.request_interval_ms || 1000) >= 3000 ? 'translate-x-4' : ''
-              }`} />
-            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-gray-600 w-6">1s</span>
+              <input
+                type="range"
+                min={1000}
+                max={10000}
+                step={500}
+                value={conn.request_interval_ms || 1000}
+                onChange={async (e) => {
+                  const newInterval = parseInt(e.target.value)
+                  try {
+                    await onUpdate(conn.name, { request_interval_ms: newInterval })
+                  } catch (err) {
+                    addNotification({ type: 'error', message: err.message })
+                  }
+                }}
+                className="flex-1 h-1.5 accent-amber-500 cursor-pointer"
+              />
+              <span className="text-[10px] text-gray-600 w-6">10s</span>
+            </div>
+            <p className="text-[10px] text-gray-600 mt-1">
+              Min interval between requests. Increase for free/dev-tier API keys to avoid rate limits.
+            </p>
           </div>
 
           {/* Metered service usage — inline in the card */}
