@@ -766,15 +766,24 @@ The `run_autonomous` method in `agent/core.py` checks the task's `skill_policy` 
 
 ## 8. Implementation Phases
 
-### Phase 1: Foundation (1-2 weeks)
-**Goal: Skills load and work with the agent**
+### Phase 1: Foundation (2-3 weeks)
+**Goal: Skills load, work with the agent, and are usable from chat**
 
+Backend:
 - [ ] `backend/skills/models.py` — Pydantic models for SkillManifest, ScanResult
 - [ ] `backend/skills/registry.py` — Load skills from `data/skills/`, maintain index
 - [ ] `backend/skills/resolver.py` — Basic keyword + embedding matching
 - [ ] Integrate resolver into `agent/core.py` — inject matched skill instructions into system prompt
 - [ ] `backend/api/skills.py` — CRUD endpoints
-- [ ] `frontend/pages/Skills.jsx` — Basic list view with enable/disable
+- [ ] Extend `backend/api/chat.py` — parse `/skill-name` prefix from messages, resolve to skill, inject into agent context
+- [ ] Add `skill_discovery` to project settings model (`off` / `suggest` / `auto`, default `off`)
+
+Frontend:
+- [ ] `frontend/pages/Skills.jsx` — Basic library view with enable/disable per project
+- [ ] `frontend/components/SkillPicker.jsx` — Autocomplete dropdown triggered by `/` in chat input
+- [ ] Extend `Chat.jsx` — `/` prefix detection opens SkillPicker; show skill name badge when a skill is active in a response
+- [ ] Add **Auto-Skill** toggle to chat header bar (alongside Personality and Focus toggles), cycling off → suggest → auto
+- [ ] Store Auto-Skill toggle state per project via project settings API
 
 ### Phase 2: Security Scanner (1-2 weeks)
 **Goal: Skills are scanned before activation**
