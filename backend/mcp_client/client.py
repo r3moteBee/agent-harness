@@ -10,8 +10,10 @@ Reference: MCP Specification 2025-03-26 — Streamable HTTP Transport
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -20,6 +22,10 @@ import httpx
 logger = logging.getLogger(__name__)
 
 MCP_PROTOCOL_VERSION = "2025-03-26"
+
+# Retry settings for rate-limited requests
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 2.0  # seconds, doubles each retry
 
 
 class MCPClient:
@@ -45,6 +51,8 @@ class MCPClient:
         self.tools: list[dict[str, Any]] = []
         self._initialized = False
         self._request_id = 0
+        self._last_request_time: float = 0.0
+        self._min_request_interval: float = 1.0  # seconds between requests
 
     def _next_id(self) -> int:
         self._request_id += 1
@@ -75,8 +83,23 @@ class MCPClient:
             url = f"{url}{sep}tavilyApiKey={self.api_key}"
         return url
 
-    async def _send_jsonrpc(self, method: str, params: dict | None = None) -> dict[str, Any]:
-        """Send a JSON-RPC 2.0 request and return the result."""
+    async def _throttle(self) -> None:
+        """Enforce minimum interval between requests to avoid rate limits."""
+        now = time.monotonic()
+        elapsed = now - self._last_request_time
+        if elapsed < self._min_request_interval:
+            wait = self._min_request_interval - elapsed
+            logger.debug("MCP '%s' throttling: waiting %.1fs", self.name, wait)
+            await asyncio.sleep(wait)
+        self._last_request_time = time.monotonic()
+
+    async def _send_jsonrpc(
+        self, method: str, params: dict | None = None, *, retry_on_429: bool = False
+    ) -> dict[str, Any]:
+        """Send a JSON-RPC 2.0 request and return the result.
+
+        If retry_on_429 is True, retries with exponential backoff on HTTP 429.
+        """
         request_id = self._next_id()
         payload: dict[str, Any] = {
             "jsonrpc": "2.0",
@@ -89,29 +112,49 @@ class MCPClient:
         url = self._build_url()
         headers = self._build_headers()
 
-        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
+        max_attempts = MAX_RETRIES if retry_on_429 else 1
 
-            content_type = resp.headers.get("content-type", "")
+        for attempt in range(max_attempts):
+            await self._throttle()
 
-            # Track session ID from server
-            new_session = resp.headers.get("mcp-session-id")
-            if new_session:
-                self.session_id = new_session
+            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
+                resp = await client.post(url, json=payload, headers=headers)
 
-            if "text/event-stream" in content_type:
-                # Parse SSE response — collect all data events
-                return self._parse_sse_response(resp.text, request_id)
-            else:
-                # Plain JSON response
-                data = resp.json()
-                if "error" in data:
-                    raise MCPError(
-                        data["error"].get("message", "Unknown MCP error"),
-                        code=data["error"].get("code", -1),
+                # Handle HTTP-level 429
+                if resp.status_code == 429 and retry_on_429 and attempt < max_attempts - 1:
+                    delay = RETRY_BASE_DELAY * (2 ** attempt)
+                    retry_after = resp.headers.get("retry-after")
+                    if retry_after and retry_after.isdigit():
+                        delay = max(delay, float(retry_after))
+                    logger.warning(
+                        "MCP '%s' rate limited (HTTP 429), retrying in %.1fs (attempt %d/%d)",
+                        self.name, delay, attempt + 1, max_attempts,
                     )
-                return data.get("result", {})
+                    await asyncio.sleep(delay)
+                    continue
+
+                resp.raise_for_status()
+
+                content_type = resp.headers.get("content-type", "")
+
+                # Track session ID from server
+                new_session = resp.headers.get("mcp-session-id")
+                if new_session:
+                    self.session_id = new_session
+
+                if "text/event-stream" in content_type:
+                    return self._parse_sse_response(resp.text, request_id)
+                else:
+                    data = resp.json()
+                    if "error" in data:
+                        raise MCPError(
+                            data["error"].get("message", "Unknown MCP error"),
+                            code=data["error"].get("code", -1),
+                        )
+                    return data.get("result", {})
+
+        # Should not reach here, but just in case
+        raise MCPError("Max retries exceeded", code=429)
 
     def _parse_sse_response(self, body: str, request_id: int) -> dict[str, Any]:
         """Parse an SSE response body and extract the JSON-RPC result."""
@@ -201,30 +244,76 @@ class MCPClient:
         return self.tools
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any] | None = None) -> str:
-        """Call a tool on the remote MCP server and return the text result."""
+        """Call a tool on the remote MCP server and return the text result.
+
+        Retries on HTTP 429 with exponential backoff. Also detects rate-limit
+        errors embedded in tool result content (e.g. Tavily returns 429 errors
+        as tool output) and retries those too.
+        """
         if not self._initialized:
             await self.initialize()
 
-        result = await self._send_jsonrpc("tools/call", {
-            "name": tool_name,
-            "arguments": arguments or {},
-        })
+        for attempt in range(MAX_RETRIES):
+            result = await self._send_jsonrpc(
+                "tools/call",
+                {"name": tool_name, "arguments": arguments or {}},
+                retry_on_429=True,
+            )
 
-        # Extract text content from the MCP response
-        content_blocks = result.get("content", [])
-        texts = []
-        for block in content_blocks:
-            if isinstance(block, dict):
-                if block.get("type") == "text":
-                    texts.append(block.get("text", ""))
-                elif block.get("type") == "image":
-                    texts.append(f"[Image: {block.get('mimeType', 'image')}]")
+            # Extract text content from the MCP response
+            content_blocks = result.get("content", [])
+            texts = []
+            for block in content_blocks:
+                if isinstance(block, dict):
+                    if block.get("type") == "text":
+                        texts.append(block.get("text", ""))
+                    elif block.get("type") == "image":
+                        texts.append(f"[Image: {block.get('mimeType', 'image')}]")
+                    else:
+                        texts.append(str(block))
                 else:
                     texts.append(str(block))
-            else:
-                texts.append(str(block))
 
-        return "\n".join(texts) if texts else str(result)
+            text_result = "\n".join(texts) if texts else str(result)
+
+            # Check for rate-limit errors embedded in the result content
+            # (e.g. Tavily returns {"error":...,"status":429,...} as tool text)
+            if self._is_rate_limited_result(text_result) and attempt < MAX_RETRIES - 1:
+                delay = RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning(
+                    "MCP '%s' tool '%s' returned rate-limit error in content, "
+                    "retrying in %.1fs (attempt %d/%d)",
+                    self.name, tool_name, delay, attempt + 1, MAX_RETRIES,
+                )
+                await asyncio.sleep(delay)
+                continue
+
+            return text_result
+
+        return text_result  # Return last result even if still rate-limited
+
+    @staticmethod
+    def _is_rate_limited_result(text: str) -> bool:
+        """Detect rate-limit errors embedded in tool result text."""
+        # Many APIs return JSON with status 429 inside the text content
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict):
+                status = data.get("status")
+                if status == 429 or status == "429":
+                    return True
+                detail = data.get("detail", {})
+                if isinstance(detail, dict) and ("429" in str(detail.get("status", "")) or "rate" in str(detail.get("error", "")).lower()):
+                    return True
+        except (json.JSONDecodeError, TypeError):
+            pass
+        # Also check for common rate-limit phrases in plain text
+        lower = text.lower()
+        if '"status":429' in lower or '"status": 429' in lower:
+            return True
+        if "excessive requests" in lower and "blocked" in lower:
+            return True
+        return False
 
     async def test_connection(self) -> dict[str, Any]:
         """Test the connection by initializing and listing tools."""
