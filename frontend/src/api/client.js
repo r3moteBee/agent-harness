@@ -154,6 +154,19 @@ export const settingsApi = {
   restartTelegram: () => api.post('/api/settings/restart-telegram'),
 }
 
+// Skills API
+export const skillsApi = {
+  list: (projectId) =>
+    api.get('/api/skills', { params: { project_id: projectId } }),
+  get: (skillName) => api.get(`/api/skills/${skillName}`),
+  toggle: (skillName, projectId, enabled) =>
+    api.put(`/api/skills/${skillName}/toggle`, { project_id: projectId, enabled }),
+  reload: () => api.post('/api/skills/reload'),
+  getDiscovery: (projectId) => api.get(`/api/skills/discovery/${projectId}`),
+  setDiscovery: (projectId, mode) =>
+    api.put(`/api/skills/discovery/${projectId}`, null, { params: { mode } }),
+}
+
 // Tasks API
 export const tasksApi = {
   list: (projectId) => api.get('/api/tasks', { params: { project_id: projectId } }),

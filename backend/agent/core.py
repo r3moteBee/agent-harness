@@ -36,12 +36,16 @@ class AgentCore:
         project_name: str | None = None,
         session_id: str | None = None,
         memory_manager: Any = None,
+        skill_context: str | None = None,
+        active_skill_name: str | None = None,
     ):
         self.provider = provider
         self.project_id = project_id
         self.project_name = project_name
         self.session_id = session_id or str(uuid.uuid4())
         self.memory_manager = memory_manager
+        self.skill_context = skill_context
+        self.active_skill_name = active_skill_name
         self.working_memory: list[dict[str, str]] = []
 
     def _add_working_message(self, role: str, content: Any) -> None:
@@ -166,11 +170,12 @@ class AgentCore:
             except Exception as e:
                 logger.warning("Failed to pre-recall memories: %s", e)
 
-            # Build system prompt
+            # Build system prompt (inject skill instructions if a skill is active)
             system_prompt = build_system_prompt(
                 project_id=self.project_id,
                 project_name=self.project_name,
                 recalled_memories=recalled_memories,
+                extra_context=self.skill_context,
                 personality_weight=_personality_weight,
             )
 

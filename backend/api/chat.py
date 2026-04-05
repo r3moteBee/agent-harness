@@ -20,6 +20,9 @@ from agent.core import AgentCore
 from config import get_settings
 from memory.manager import create_memory_manager
 from models.provider import get_provider
+from skills.resolver import resolve_explicit, resolve_auto, build_skill_context
+from skills.registry import get_skill_registry
+from skills.models import SkillDiscoveryMode
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -146,11 +149,70 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 session_id=session_id,
                 provider=provider,
             )
+
+            # ── Skill resolution ─────────────────────────────────────
+            skill_context = None
+            active_skill_name = None
+
+            # 1. Check for explicit /skill-name invocation
+            explicit_skill, remaining_message = resolve_explicit(message)
+            if explicit_skill:
+                registry = get_skill_registry()
+                skill = registry.get(explicit_skill)
+                if skill:
+                    active_skill_name = explicit_skill
+                    skill_context = build_skill_context(skill, project_id=project_id)
+                    message = remaining_message or message
+                    await websocket.send_json({
+                        "type": "skill_active",
+                        "skill": explicit_skill,
+                        "description": skill.manifest.description,
+                    })
+            else:
+                # 2. Check for auto-discovery if enabled
+                try:
+                    from secrets.vault import get_vault as _gv
+                    _vault = _gv()
+                    discovery_mode = _vault.get_secret(f"skill_discovery_{project_id}") or "off"
+                except Exception:
+                    discovery_mode = "off"
+
+                if discovery_mode in ("suggest", "auto"):
+                    matches = resolve_auto(
+                        message,
+                        project_id=project_id,
+                        mode=SkillDiscoveryMode(discovery_mode),
+                        top_k=1,
+                    )
+                    if matches and matches[0]["score"] >= 2.0:
+                        best = matches[0]
+                        skill = best["skill"]
+                        if discovery_mode == "auto":
+                            active_skill_name = skill.name
+                            skill_context = build_skill_context(skill, project_id=project_id)
+                            await websocket.send_json({
+                                "type": "skill_active",
+                                "skill": skill.name,
+                                "description": skill.manifest.description,
+                                "auto": True,
+                            })
+                        else:
+                            # suggest mode — notify but don't activate
+                            await websocket.send_json({
+                                "type": "skill_suggestion",
+                                "skill": skill.name,
+                                "description": skill.manifest.description,
+                                "score": best["score"],
+                                "reason": best["reason"],
+                            })
+
             agent = AgentCore(
                 provider=provider,
                 memory_manager=memory,
                 project_id=project_id,
                 session_id=session_id,
+                skill_context=skill_context,
+                active_skill_name=active_skill_name,
             )
 
             # Save user message to episodic memory

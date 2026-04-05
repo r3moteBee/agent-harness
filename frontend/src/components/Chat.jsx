@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Square, ChevronDown, ChevronRight, Zap, Brain, Clock, Sparkles, Paperclip, X, FileText, Image, File, Target, UserCircle } from 'lucide-react'
+import { Send, Square, ChevronDown, ChevronRight, Zap, Brain, Clock, Sparkles, Paperclip, X, FileText, Image, File, Target, UserCircle, Wand2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useStore } from '../store'
-import { createChatSocket, settingsApi, chatApi } from '../api/client'
+import { createChatSocket, settingsApi, chatApi, skillsApi } from '../api/client'
+import SkillPicker from './SkillPicker'
 
 function ToolCallBlock({ toolCall }) {
   const [expanded, setExpanded] = useState(false)
@@ -156,6 +157,10 @@ export default function Chat() {
   const [recallLoading, setRecallLoading] = useState(false)
   const [personalityWeight, setPersonalityWeight] = useState('balanced')
   const [contextFocus, setContextFocus] = useState('balanced')
+  const [skillDiscovery, setSkillDiscovery] = useState('off')
+  const [showSkillPicker, setShowSkillPicker] = useState(false)
+  const [skillQuery, setSkillQuery] = useState('')
+  const [activeSkillBadge, setActiveSkillBadge] = useState(null)
   const messagesEndRef = useRef(null)
   const socketRef = useRef(null)
   const textareaRef = useRef(null)
@@ -186,7 +191,12 @@ export default function Chat() {
       setPersonalityWeight(res.data.personality_weight || 'balanced')
       setContextFocus(res.data.context_focus || 'balanced')
     }).catch(() => {})
-  }, [])
+    // Load skill discovery setting for active project
+    const pid = activeProject?.id || 'default'
+    skillsApi.getDiscovery(pid).then((res) => {
+      setSkillDiscovery(res.data.skill_discovery || 'off')
+    }).catch(() => {})
+  }, [activeProject?.id])
 
   const toggleMemoryRecall = async () => {
     const next = !memoryRecall
@@ -223,6 +233,19 @@ export default function Chat() {
       await settingsApi.update({ context_focus: next })
       setContextFocus(next)
       addNotification({ type: 'success', message: `Focus: ${next}` })
+    } catch (err) {
+      addNotification({ type: 'error', message: err.message })
+    }
+  }
+
+  const cycleSkillDiscovery = async () => {
+    const order = ['off', 'suggest', 'auto']
+    const next = order[(order.indexOf(skillDiscovery) + 1) % order.length]
+    const pid = activeProject?.id || 'default'
+    try {
+      await skillsApi.setDiscovery(pid, next)
+      setSkillDiscovery(next)
+      addNotification({ type: 'success', message: `Auto-Skill: ${next}` })
     } catch (err) {
       addNotification({ type: 'error', message: err.message })
     }
@@ -324,6 +347,15 @@ export default function Chat() {
         case 'session_start':
           setSessionId(event.session_id)
           break
+        case 'skill_active':
+          setActiveSkillBadge(event.skill)
+          break
+        case 'skill_suggestion':
+          addNotification({
+            type: 'info',
+            message: `Skill suggestion: /${event.skill} — ${event.description}`,
+          })
+          break
         case 'text_delta':
           appendStreamingContent(event.content)
           break
@@ -351,6 +383,7 @@ export default function Chat() {
           setStreamingContent('')
           clearToolCalls()
           setIsStreaming(false)
+          setActiveSkillBadge(null)
           break
         }
         case 'error':
@@ -483,6 +516,20 @@ export default function Chat() {
             <span className="text-gray-500">Focus:</span> {contextFocus.charAt(0).toUpperCase() + contextFocus.slice(1)}
           </button>
           <button
+            onClick={cycleSkillDiscovery}
+            title={`Auto-Skill: ${skillDiscovery} — off = manual only, suggest = recommend skills, auto = activate automatically. Click to cycle.`}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
+              skillDiscovery === 'auto'
+                ? 'bg-emerald-900 text-emerald-300 hover:bg-emerald-800'
+                : skillDiscovery === 'suggest'
+                  ? 'bg-amber-900 text-amber-300 hover:bg-amber-800'
+                  : 'bg-gray-800 text-gray-500 hover:bg-gray-700'
+            }`}
+          >
+            <Wand2 className="w-3 h-3" />
+            <span className="text-gray-500">Skill:</span> {skillDiscovery.charAt(0).toUpperCase() + skillDiscovery.slice(1)}
+          </button>
+          <button
             onClick={cyclePersonalityWeight}
             title={`Personality presence: ${personalityWeight} — controls how much the agent's identity shows in responses. Click to cycle: minimal → balanced → strong`}
             className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
@@ -536,6 +583,12 @@ export default function Chat() {
                   <Brain className="w-3.5 h-3.5 text-white" />
                 </div>
                 <span className="text-xs text-gray-500">Agent</span>
+                {activeSkillBadge && (
+                  <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-brand-900 text-brand-300">
+                    <Zap className="w-2.5 h-2.5" />
+                    {activeSkillBadge}
+                  </span>
+                )}
                 <div className="flex gap-1 ml-1">
                   <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                   <div className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -596,11 +649,47 @@ export default function Chat() {
           />
 
           <div className="flex-1 relative">
+            <SkillPicker
+              query={skillQuery}
+              projectId={activeProject?.id || 'default'}
+              visible={showSkillPicker}
+              onSelect={(name) => {
+                setInput(`/${name} `)
+                setShowSkillPicker(false)
+                setSkillQuery('')
+                textareaRef.current?.focus()
+              }}
+              onClose={() => {
+                setShowSkillPicker(false)
+                setSkillQuery('')
+              }}
+            />
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onChange={(e) => {
+                const val = e.target.value
+                setInput(val)
+                // Detect / at start of input for skill picker
+                if (val.startsWith('/')) {
+                  const afterSlash = val.slice(1).split(/\s/)[0]
+                  setSkillQuery(afterSlash)
+                  setShowSkillPicker(true)
+                } else {
+                  setShowSkillPicker(false)
+                  setSkillQuery('')
+                }
+              }}
+              onKeyDown={(e) => {
+                // Let SkillPicker handle keys when open
+                if (showSkillPicker && ['ArrowUp', 'ArrowDown', 'Tab', 'Escape'].includes(e.key)) {
+                  return // SkillPicker handles these via its own listener
+                }
+                if (showSkillPicker && e.key === 'Enter' && !e.shiftKey) {
+                  return // SkillPicker handles Enter
+                }
+                handleKeyDown(e)
+              }}
               onPaste={handlePaste}
               placeholder={uploading ? 'Uploading files...' : 'Message the agent... (Enter to send, Shift+Enter for newline)'}
               rows={1}

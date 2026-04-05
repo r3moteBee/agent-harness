@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
   MessageSquare, Brain, FolderOpen, User, Settings,
-  ListTodo, Briefcase, Menu, X, Bot, ChevronDown, LogOut, Check
+  ListTodo, Briefcase, Menu, X, Bot, ChevronDown, LogOut, Check, Zap
 } from 'lucide-react'
 import { useStore } from '../store'
 import { projectsApi } from '../api/client'
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { to: '/chat', icon: MessageSquare, label: 'Chat' },
   { to: '/memory', icon: Brain, label: 'Memory' },
   { to: '/files', icon: FolderOpen, label: 'Files' },
+  { to: '/skills', icon: Zap, label: 'Skills' },
   { to: '/personality', icon: User, label: 'Personality' },
   { to: '/tasks', icon: ListTodo, label: 'Tasks' },
   { to: '/projects', icon: Briefcase, label: 'Projects' },
