@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # Application
     app_env: str = Field(default="development", env="APP_ENV")
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
-    cors_origins: str = Field(default="http://localhost:3000,http://localhost:5173,http://localhost:80", env="CORS_ORIGINS")
+    cors_origins: str = Field(default="http://localhost:8000,http://localhost:5173,http://localhost:80", env="CORS_ORIGINS")
 
     # Search
     # URL of a search backend (SearXNG, Brave, or any OpenSearch-compatible JSON API).

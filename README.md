@@ -67,8 +67,8 @@ Required fields:
 ~/pantheon/stop.sh    # stop all processes
 ```
 
-- Web UI: http://localhost:3000
-- API / API Docs: http://localhost:8000 / http://localhost:8000/docs
+- Web UI + API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
 **Docker mode:**
 
@@ -125,8 +125,8 @@ Caddy will automatically obtain and renew TLS certificates. No manual cert manag
                  │                  │
          ┌───────▼────────┐  ┌──────▼────────┐
          │  React Frontend │  │  FastAPI      │
-         │  Port 3000      │  │  Backend      │
-         │  Port 80        │  │  Port 8000    │
+         │  (static, served│  │  Backend      │
+         │   by backend)   │  │  Port 8000    │
          └────────────────┘  └────┬──────┬──┘
                                   │      │
                         ┌─────────┴─┬────┴──────────┐
@@ -259,7 +259,7 @@ APP_ENV=production
 
 ```env
 # Allow specific origins
-CORS_ORIGINS=http://localhost:3000,http://localhost:80,https://yourdomain.com
+CORS_ORIGINS=http://localhost:8000,http://localhost:80,https://yourdomain.com
 ```
 
 ### Logging Configuration
