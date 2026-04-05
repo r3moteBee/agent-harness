@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plug, Plus, Trash2, RefreshCw, CheckCircle, XCircle, ChevronDown, ChevronRight, Zap, Eye, EyeOff, Gauge, RotateCcw } from 'lucide-react'
+import { Plug, Plus, Trash2, RefreshCw, CheckCircle, XCircle, ChevronDown, ChevronRight, Zap, Eye, EyeOff, Gauge, RotateCcw, ShieldAlert } from 'lucide-react'
 import { useStore } from '../store'
 import { mcpApi } from '../api/client'
 
@@ -245,10 +245,11 @@ function ConnectionUsagePanel({ serviceType }) {
 
 // ── Connection Card ────────────────────────────────────────────────────────
 
-function ConnectionCard({ conn, onRemove, onTest, onReconnect }) {
+function ConnectionCard({ conn, onRemove, onTest, onReconnect, onUpdate }) {
   const [expanded, setExpanded] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
+  const addNotification = useStore((s) => s.addNotification)
 
   const meteredType = isMeteredConnection(conn)
 
@@ -347,6 +348,37 @@ function ConnectionCard({ conn, onRemove, onTest, onReconnect }) {
           ) : (
             <p className="text-xs text-gray-500">Not connected — no tools discovered. Click the test button to connect.</p>
           )}
+
+          {/* Dev-key throttle toggle */}
+          <div className="flex items-center justify-between pt-2 border-t border-gray-700">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+              <div>
+                <span className="text-xs text-gray-300">Dev-key throttle</span>
+                <p className="text-[10px] text-gray-600">
+                  Slows requests to {conn.request_interval_ms >= 3000 ? '3s' : '1s'} apart — use for free/dev-tier API keys
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                const newInterval = (conn.request_interval_ms || 1000) >= 3000 ? 1000 : 3000
+                try {
+                  await onUpdate(conn.name, { request_interval_ms: newInterval })
+                  addNotification({ type: 'success', message: `Throttle ${newInterval >= 3000 ? 'enabled' : 'disabled'} for ${conn.name}` })
+                } catch (err) {
+                  addNotification({ type: 'error', message: err.message })
+                }
+              }}
+              className={`relative w-9 h-5 rounded-full transition-colors ${
+                (conn.request_interval_ms || 1000) >= 3000 ? 'bg-amber-600' : 'bg-gray-600'
+              }`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                (conn.request_interval_ms || 1000) >= 3000 ? 'translate-x-4' : ''
+              }`} />
+            </button>
+          </div>
 
           {/* Metered service usage — inline in the card */}
           {meteredType && conn.connected && (
@@ -516,6 +548,11 @@ export default function MCPConnections() {
     }
   }
 
+  const handleUpdate = async (name, data) => {
+    await mcpApi.updateConnection(name, data)
+    await loadConnections()
+  }
+
   return (
     <div className="h-full overflow-y-auto p-6 scrollbar-thin">
       <div className="max-w-4xl mx-auto">
@@ -568,6 +605,7 @@ export default function MCPConnections() {
                 onRemove={handleRemove}
                 onTest={handleTest}
                 onReconnect={handleReconnect}
+                onUpdate={handleUpdate}
               />
             ))}
           </div>

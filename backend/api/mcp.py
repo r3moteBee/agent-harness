@@ -19,6 +19,7 @@ class AddConnectionRequest(BaseModel):
     api_key: str = ""
     headers: dict[str, str] = {}
     enabled: bool = True
+    request_interval_ms: int = 1000  # Throttle between requests (ms). Use ~3000 for dev-tier API keys.
 
 
 class UpdateConnectionRequest(BaseModel):
@@ -26,6 +27,7 @@ class UpdateConnectionRequest(BaseModel):
     api_key: str | None = None
     headers: dict[str, str] | None = None
     enabled: bool | None = None
+    request_interval_ms: int | None = None
 
 
 class TavilyThresholdRequest(BaseModel):
@@ -56,6 +58,7 @@ async def add_connection(req: AddConnectionRequest) -> dict[str, Any]:
             api_key=req.api_key,
             headers=req.headers,
             enabled=req.enabled,
+            request_interval_ms=req.request_interval_ms,
         )
         return result
     except ValueError as e:
@@ -77,6 +80,7 @@ async def update_connection(name: str, req: UpdateConnectionRequest) -> dict[str
             api_key=req.api_key,
             headers=req.headers,
             enabled=req.enabled,
+            request_interval_ms=req.request_interval_ms,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

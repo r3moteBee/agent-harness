@@ -38,6 +38,7 @@ class MCPClient:
         api_key: str = "",
         headers: dict[str, str] | None = None,
         timeout: float = 30.0,
+        request_interval_ms: int = 1000,
     ) -> None:
         self.name = name
         self.url = url  # Preserve URL as-is (trailing slash matters for some servers)
@@ -52,7 +53,7 @@ class MCPClient:
         self._initialized = False
         self._request_id = 0
         self._last_request_time: float = 0.0
-        self._min_request_interval: float = 1.0  # seconds between requests
+        self._min_request_interval: float = request_interval_ms / 1000.0
 
     def _next_id(self) -> int:
         self._request_id += 1

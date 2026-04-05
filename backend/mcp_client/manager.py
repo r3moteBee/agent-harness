@@ -81,6 +81,7 @@ class MCPManager:
             api_key=cfg.get("api_key", ""),
             headers=cfg.get("headers", {}),
             timeout=cfg.get("timeout", 30.0),
+            request_interval_ms=cfg.get("request_interval_ms", 1000),
         )
 
     # ── Connection CRUD ──────────────────────────────────────────────────
@@ -97,6 +98,7 @@ class MCPManager:
                 "headers": {k: "***" for k in cfg.get("headers", {})},
                 "connected": cfg["name"] in self._clients,
                 "tools_count": len(self._clients[cfg["name"]].tools) if cfg["name"] in self._clients else 0,
+                "request_interval_ms": cfg.get("request_interval_ms", 1000),
             }
             result.append(entry)
         return result
@@ -108,6 +110,7 @@ class MCPManager:
         api_key: str = "",
         headers: dict[str, str] | None = None,
         enabled: bool = True,
+        request_interval_ms: int = 1000,
     ) -> dict[str, Any]:
         """Add a new MCP connection and attempt to connect."""
         # Check for duplicate name
@@ -121,6 +124,7 @@ class MCPManager:
             "api_key": api_key,
             "headers": headers or {},
             "enabled": enabled,
+            "request_interval_ms": request_interval_ms,
         }
         self._configs.append(cfg)
         self._save_configs()
@@ -151,6 +155,7 @@ class MCPManager:
         api_key: str | None = None,
         headers: dict[str, str] | None = None,
         enabled: bool | None = None,
+        request_interval_ms: int | None = None,
     ) -> dict[str, Any]:
         """Update an existing MCP connection."""
         cfg = None
@@ -169,6 +174,8 @@ class MCPManager:
             cfg["headers"] = headers
         if enabled is not None:
             cfg["enabled"] = enabled
+        if request_interval_ms is not None:
+            cfg["request_interval_ms"] = request_interval_ms
 
         self._save_configs()
 
