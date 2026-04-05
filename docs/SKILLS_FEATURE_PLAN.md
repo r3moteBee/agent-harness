@@ -771,7 +771,7 @@ The `run_autonomous` method in `agent/core.py` checks the task's `skill_policy` 
 
 Backend:
 - [ ] `backend/skills/models.py` — Pydantic models for SkillManifest, ScanResult
-- [ ] `backend/skills/registry.py` — Load skills from `data/skills/`, maintain index
+- [ ] `backend/skills/registry.py` — Load skills from `skills/` (bundled) and `data/skills/` (user-installed), maintain index
 - [ ] `backend/skills/resolver.py` — Basic keyword + embedding matching
 - [ ] Integrate resolver into `agent/core.py` — inject matched skill instructions into system prompt
 - [ ] `backend/api/skills.py` — CRUD endpoints
@@ -784,6 +784,18 @@ Frontend:
 - [ ] Extend `Chat.jsx` — `/` prefix detection opens SkillPicker; show skill name badge when a skill is active in a response
 - [ ] Add **Auto-Skill** toggle to chat header bar (alongside Personality and Focus toggles), cycling off → suggest → auto
 - [ ] Store Auto-Skill toggle state per project via project settings API
+
+Bundled Starter Skills (in `skills/` at repo root — shipped with Pantheon):
+- [x] `web-research` — Search the web and produce a structured summary with sources
+- [x] `code-review` — Review code files for bugs, security, performance, and style (project-aware)
+- [x] `summarize-conversation` — Distill conversation into key points, decisions, and action items (reads episodic memory)
+- [x] `explain-code` — Explain code in plain language adapted to user's level (project-aware)
+- [x] `task-breakdown` — Break complex goals into actionable steps with effort estimates (reads/writes semantic memory)
+- [x] `knowledge-capture` — Extract and store key facts and relationships into memory (writes semantic + graph memory)
+- [x] `daily-digest` — Summarize recent project activity from memory and workspace (schedulable, reads episodic + semantic)
+- [x] `draft-message` — Write professional emails, Slack messages, and announcements (reads semantic memory for context)
+
+These 8 skills cover the key feature dimensions: simple instruction-only skills, project-aware skills, memory-reading skills, memory-writing skills, and a schedulable skill. They provide immediate test coverage for the Skills.jsx library page, `/` invocation in chat, and the Auto-Skill resolver.
 
 ### Phase 2: Security Scanner (1-2 weeks)
 **Goal: Skills are scanned before activation**

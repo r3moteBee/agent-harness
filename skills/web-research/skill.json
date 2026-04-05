@@ -1,0 +1,42 @@
+{
+  "name": "web-research",
+  "version": "2026-04-05",
+  "description": "Research a topic using web search and produce a structured summary with sources. Use when the user asks to research something, find information about a topic, compare options, or investigate a question that requires up-to-date web knowledge.",
+  "author": "pantheon",
+  "license": "MIT",
+  "triggers": [
+    "research this topic",
+    "find information about",
+    "what's the latest on",
+    "compare options for",
+    "investigate",
+    "look into",
+    "find out about"
+  ],
+  "parameters": [
+    { "name": "topic", "type": "string", "required": true, "description": "The topic or question to research" },
+    { "name": "depth", "type": "string", "required": false, "description": "How deep to go: quick, standard, or thorough" }
+  ],
+  "capabilities_required": ["network"],
+  "dependencies": {},
+  "tags": ["research", "search", "information", "web"],
+  "source_hub": null,
+  "security_scan": null,
+  "pantheon": {
+    "memory": {
+      "reads": [],
+      "writes": ["semantic"],
+      "auto_store": true
+    },
+    "project_aware": false,
+    "schedulable": { "enabled": false },
+    "permissions": {
+      "network_domains": ["*"],
+      "file_paths": ["workspace/**"],
+      "vault_secrets": [],
+      "memory_tiers": { "semantic": "w", "episodic": "none", "graph": "none" }
+    },
+    "telemetry": { "track_usage": true, "auto_disable_threshold": 5 },
+    "evolution": { "enabled": false, "locked": false }
+  }
+}

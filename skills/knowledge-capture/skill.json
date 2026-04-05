@@ -1,0 +1,40 @@
+{
+  "name": "knowledge-capture",
+  "version": "2026-04-05",
+  "description": "Extract key facts, decisions, and learnings from the current conversation and store them in memory for future recall. Use when the user asks to remember something, save important context, capture what was learned, or preserve decisions for the future.",
+  "author": "pantheon",
+  "license": "MIT",
+  "triggers": [
+    "remember this",
+    "save this to memory",
+    "capture this knowledge",
+    "store this for later",
+    "don't forget that",
+    "save what we learned"
+  ],
+  "parameters": [
+    { "name": "scope", "type": "string", "required": false, "description": "What to capture: specific (just what the user highlighted) or full (scan entire conversation)" }
+  ],
+  "capabilities_required": [],
+  "dependencies": {},
+  "tags": ["memory", "knowledge", "capture", "save", "recall"],
+  "source_hub": null,
+  "security_scan": null,
+  "pantheon": {
+    "memory": {
+      "reads": ["episodic"],
+      "writes": ["semantic", "graph"],
+      "auto_store": false
+    },
+    "project_aware": true,
+    "schedulable": { "enabled": false },
+    "permissions": {
+      "network_domains": [],
+      "file_paths": [],
+      "vault_secrets": [],
+      "memory_tiers": { "semantic": "rw", "episodic": "r", "graph": "w" }
+    },
+    "telemetry": { "track_usage": true, "auto_disable_threshold": 5 },
+    "evolution": { "enabled": false, "locked": false }
+  }
+}
