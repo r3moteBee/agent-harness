@@ -850,8 +850,13 @@ Users should be able to inspect and override scan results. A "quarantined" skill
 
 2. **Automatic skill discovery**: Controlled by the per-project Auto-Skill toggle (off / suggest / auto). When off, skills only fire via explicit `/` invocation. Resolved in Section 2.4.
 
-## 12. Open Questions for Discussion
+3. **Skill marketplace contribution**: Yes — the graduated export strategy (Section 3.3) already handles this. Pantheon-to-Pantheon bundles preserve all extensions; portable exports adapt or strip Pantheon-specific features with AI assistance. Publishing back to hubs is a Phase 5+ feature that will use the portable export path.
 
-1. **Skill marketplace contribution**: Do we want Pantheon users to be able to publish skills back to hubs? This is a Phase 5+ feature but worth designing the export format now.
+4. **Versioning strategy**: Date-based versioning (`2026-04-05`, `2026-04-05.1` for multiple versions in a day). Semantic versioning implies a precision about breaking changes that doesn't match how skills actually evolve — especially with the evolution system making incremental tweaks. Date-based is simpler, honest, and sorts naturally.
 
-2. **Versioning strategy**: Semantic versioning in skill.json? Or simpler date-based versions? Need to decide how updates from hubs are handled (auto-update vs manual).
+5. **Hub updates**: Never auto-applied. When a hub has a newer version of an installed skill, the library UI shows an "Update available" badge. Clicking it fetches the new version and runs the full security scanner pipeline before installation. The user reviews the scan results and approves or rejects.
+
+   **Interaction with local evolutions**: If the user has evolved a skill locally since the original import, a hub update creates a conflict. The update flow handles this:
+   - Show a diff: hub changes vs local evolutions since the original import.
+   - Three options: **Accept hub update** (discards local evolutions — previous version preserved in version history for rollback), **Keep local** (dismiss the update notification), or **Merge** (AI-assisted — the agent analyzes both change sets and proposes a merged version that incorporates the hub's improvements while preserving local evolutions that don't conflict).
+   - The merged version goes through the security scanner before activation, same as any other change.
