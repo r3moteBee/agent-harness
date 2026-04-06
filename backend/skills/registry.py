@@ -7,16 +7,24 @@ Skills live in two locations:
 Each skill is a directory containing at minimum a `skill.json` manifest.
 An optional `instructions.md` provides the detailed procedure injected
 into the system prompt when the skill is active.
+
+Security invariants:
+  - Only skills loaded from the bundled directory get is_bundled=True
+    (the flag is set by the loader, never read from skill.json)
+  - User-installed skills CANNOT override bundled skills of the same name
+  - User-installed skills require a passing scan before they can be enabled
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from config import get_settings
-from skills.models import LoadedSkill, SkillManifest, ProjectSkillSettings
+from skills.models import LoadedSkill, ScanResult, SkillManifest, ProjectSkillSettings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -28,16 +36,31 @@ _BUNDLED_SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "skills"
 _USER_SKILLS_DIR = settings.data_dir / "skills"
 
 
+def _compute_skill_hash(skill_dir: Path) -> str:
+    """Compute a content hash of all files in a skill directory.
+
+    Used to detect when skill files change so the scan can be invalidated.
+    """
+    h = hashlib.sha256()
+    for file_path in sorted(skill_dir.rglob("*")):
+        if file_path.is_file() and not file_path.name.startswith("."):
+            h.update(str(file_path.relative_to(skill_dir)).encode())
+            h.update(file_path.read_bytes())
+    return h.hexdigest()[:16]
+
+
 class SkillRegistry:
     """In-memory registry of all available skills."""
 
     def __init__(self) -> None:
         self._skills: dict[str, LoadedSkill] = {}
+        self._bundled_names: set[str] = set()  # Track bundled names for collision protection
         self._loaded = False
 
     def load(self) -> None:
         """(Re)load all skills from both directories."""
         self._skills.clear()
+        self._bundled_names.clear()
         loaded = 0
 
         # Load bundled skills first
@@ -47,28 +70,36 @@ class SkillRegistry:
                     skill = self._load_skill(skill_dir, is_bundled=True)
                     if skill:
                         self._skills[skill.name] = skill
+                        self._bundled_names.add(skill.name)
                         loaded += 1
 
-        # Load user-installed skills (override bundled if same name)
+        # Load user-installed skills — CANNOT override bundled skills
         _USER_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
         if _USER_SKILLS_DIR.is_dir():
             for skill_dir in sorted(_USER_SKILLS_DIR.iterdir()):
                 if skill_dir.is_dir() and (skill_dir / "skill.json").exists():
                     skill = self._load_skill(skill_dir, is_bundled=False)
                     if skill:
-                        if skill.name in self._skills:
-                            logger.info(
-                                "User skill '%s' overrides bundled version",
-                                skill.name,
+                        if skill.name in self._bundled_names:
+                            logger.warning(
+                                "BLOCKED: User skill '%s' from %s cannot override "
+                                "bundled skill of the same name — skipping",
+                                skill.name, skill_dir,
                             )
+                            continue
                         self._skills[skill.name] = skill
                         loaded += 1
 
         self._loaded = True
-        logger.info("Skill registry loaded: %d skills", loaded)
+        logger.info("Skill registry loaded: %d skills (%d bundled)", loaded, len(self._bundled_names))
 
     def _load_skill(self, skill_dir: Path, is_bundled: bool) -> LoadedSkill | None:
-        """Load a single skill from a directory."""
+        """Load a single skill from a directory.
+
+        The is_bundled flag is determined ONLY by the loader based on which
+        directory the skill was loaded from — never from skill.json content.
+        This prevents imported skills from claiming to be bundled.
+        """
         manifest_path = skill_dir / "skill.json"
         instructions_path = skill_dir / "instructions.md"
 
@@ -85,6 +116,12 @@ class SkillRegistry:
                 instructions = instructions_path.read_text(encoding="utf-8")
             except Exception as e:
                 logger.warning("Failed to read instructions for %s: %s", skill_dir.name, e)
+
+        # Load persisted scan result and check if it's still valid
+        content_hash = _compute_skill_hash(skill_dir)
+        scan_result = self._load_scan_result(manifest.name, content_hash)
+        if scan_result:
+            manifest.security_scan = scan_result
 
         # Load per-project enable/disable state
         disabled_projects = self._load_disabled_projects(manifest.name)
@@ -124,6 +161,47 @@ class SkillRegistry:
         _USER_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
         state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
+    # ── Scan persistence ─────────────────────────────────────────────────
+
+    def _scan_results_dir(self) -> Path:
+        """Directory for persisted scan results."""
+        d = _USER_SKILLS_DIR / ".scan_results"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def _load_scan_result(self, skill_name: str, content_hash: str) -> ScanResult | None:
+        """Load a persisted scan result if it exists and the content hash matches."""
+        scan_file = self._scan_results_dir() / f"{skill_name}.json"
+        if not scan_file.exists():
+            return None
+        try:
+            raw = json.loads(scan_file.read_text(encoding="utf-8"))
+            # Invalidate if content has changed since scan
+            if raw.get("content_hash") != content_hash:
+                logger.info(
+                    "Scan result for '%s' invalidated — content changed (hash %s != %s)",
+                    skill_name, raw.get("content_hash", "?"), content_hash,
+                )
+                return None
+            return ScanResult(**raw["result"])
+        except Exception as e:
+            logger.debug("Failed to load scan result for '%s': %s", skill_name, e)
+            return None
+
+    def save_scan_result(self, skill_name: str, result: ScanResult) -> None:
+        """Persist a scan result to disk, tagged with a content hash."""
+        skill = self._skills.get(skill_name)
+        if not skill:
+            return
+        content_hash = _compute_skill_hash(Path(skill.skill_dir))
+        scan_file = self._scan_results_dir() / f"{skill_name}.json"
+        payload = {
+            "content_hash": content_hash,
+            "result": json.loads(result.model_dump_json()),
+        }
+        scan_file.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        logger.info("Saved scan result for '%s' (hash=%s, passed=%s)", skill_name, content_hash, result.passed)
+
     # ── Public API ──────────────────────────────────────────────────────
 
     def ensure_loaded(self) -> None:
@@ -153,16 +231,37 @@ class SkillRegistry:
             if skill.is_enabled_for(project_id)
         ]
 
-    def enable_for_project(self, skill_name: str, project_id: str) -> bool:
-        """Enable a skill for a specific project (remove from disabled list)."""
+    def enable_for_project(self, skill_name: str, project_id: str) -> dict[str, Any]:
+        """Enable a skill for a specific project (remove from disabled list).
+
+        Non-bundled skills require a passing scan before they can be enabled.
+        Returns {"enabled": True/False, "reason": str}.
+        """
         self.ensure_loaded()
         skill = self._skills.get(skill_name)
         if not skill:
-            return False
+            return {"enabled": False, "reason": "not_found"}
+
+        # Scan gate: non-bundled skills must pass a scan before enabling
+        if not skill.is_bundled:
+            scan = skill.manifest.security_scan
+            if scan is None:
+                return {
+                    "enabled": False,
+                    "reason": "scan_required",
+                    "message": "Imported skills must pass a security scan before they can be enabled. Run a scan first.",
+                }
+            if not scan.passed:
+                return {
+                    "enabled": False,
+                    "reason": "scan_failed",
+                    "message": f"This skill failed its security scan (risk score: {scan.risk_score}). Review findings and address issues before enabling.",
+                }
+
         if project_id in skill.disabled_projects:
             skill.disabled_projects.remove(project_id)
         self._save_skill_state()
-        return True
+        return {"enabled": True, "reason": "ok"}
 
     def disable_for_project(self, skill_name: str, project_id: str) -> bool:
         """Disable a skill for a specific project (add to disabled list)."""
@@ -211,6 +310,55 @@ class SkillRegistry:
             return {"deleted": True, "was_bundled": True, "note": "Bundled skill removed from registry. Files preserved on disk. Reload to restore."}
 
         return {"deleted": True, "was_bundled": is_bundled}
+
+    def is_bundled_name(self, skill_name: str) -> bool:
+        """Check if a name belongs to a bundled skill (collision protection)."""
+        self.ensure_loaded()
+        return skill_name in self._bundled_names
+
+    def scan_summary(self) -> dict[str, Any]:
+        """Return a summary of scan status across all skills."""
+        self.ensure_loaded()
+        summary: list[dict[str, Any]] = []
+        counts = {"passed": 0, "failed": 0, "unscanned": 0, "total": 0}
+
+        for skill in self._skills.values():
+            counts["total"] += 1
+            scan = skill.manifest.security_scan
+            entry: dict[str, Any] = {
+                "name": skill.name,
+                "is_bundled": skill.is_bundled,
+                "version": skill.manifest.version,
+                "has_scripts": any(
+                    Path(skill.skill_dir).rglob("*.py")
+                ) or any(
+                    Path(skill.skill_dir).rglob("*.js")
+                ) or any(
+                    Path(skill.skill_dir).rglob("*.sh")
+                ),
+            }
+            if scan is None:
+                entry["scan_status"] = "unscanned"
+                entry["risk_score"] = None
+                entry["findings_count"] = 0
+                entry["scanned_at"] = None
+                counts["unscanned"] += 1
+            elif scan.passed:
+                entry["scan_status"] = "passed"
+                entry["risk_score"] = scan.risk_score
+                entry["findings_count"] = len(scan.findings)
+                entry["scanned_at"] = scan.scanned_at.isoformat() if scan.scanned_at else None
+                counts["passed"] += 1
+            else:
+                entry["scan_status"] = "failed"
+                entry["risk_score"] = scan.risk_score
+                entry["findings_count"] = len(scan.findings)
+                entry["scanned_at"] = scan.scanned_at.isoformat() if scan.scanned_at else None
+                counts["failed"] += 1
+
+            summary.append(entry)
+
+        return {"skills": summary, "counts": counts}
 
     def names(self) -> list[str]:
         """Get all skill names."""

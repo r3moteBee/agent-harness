@@ -1,4 +1,10 @@
-"""Skills API — list, enable/disable, reload, scan, and inspect skills."""
+"""Skills API — list, enable/disable, reload, scan, and inspect skills.
+
+IMPORTANT: Route ordering matters in FastAPI. Literal path routes (like
+/skills/reload, /skills/scan/all) MUST be defined before parameterised
+routes (like /skills/{skill_name}) to avoid the literal segments being
+captured as a skill_name parameter.
+"""
 from __future__ import annotations
 
 import logging
@@ -21,6 +27,10 @@ class SkillToggleRequest(BaseModel):
     enabled: bool
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# LITERAL ROUTES (must come before {skill_name} parameterised routes)
+# ═══════════════════════════════════════════════════════════════════════════
+
 # ── List all skills ──────────────────────────────────────────────────────────
 
 @router.get("/skills")
@@ -40,6 +50,136 @@ async def list_skills(
         "count": len(skills),
     }
 
+
+# ── Reload the skill registry ───────────────────────────────────────────────
+
+@router.post("/skills/reload")
+async def reload_skills() -> dict[str, Any]:
+    """Force-reload all skills from disk."""
+    registry = reload_skill_registry()
+    return {
+        "status": "reloaded",
+        "count": len(registry.list_all()),
+        "skills": registry.names(),
+    }
+
+
+# ── Scan all / scan summary ─────────────────────────────────────────────────
+
+@router.post("/skills/scan/all")
+async def scan_all_skills(
+    ai_review: bool = Query(default=False, description="Run AI review on each skill (slow for many skills)"),
+) -> dict[str, Any]:
+    """Run the security scanner on ALL registered skills.
+
+    Returns a summary of results. AI review is off by default for bulk
+    scans to keep it fast — use per-skill scan for deep analysis.
+    """
+    from skills.scanner import scan_skill
+
+    registry = get_skill_registry()
+    all_skills = registry.list_all()
+    results: list[dict[str, Any]] = []
+
+    for skill in all_skills:
+        skill_dir = Path(skill.skill_dir)
+        try:
+            result = await scan_skill(
+                skill_dir=skill_dir,
+                manifest=skill.manifest,
+                instructions=skill.instructions,
+                run_ai_review=ai_review,
+            )
+            skill.manifest.security_scan = result
+            registry.save_scan_result(skill.name, result)
+            results.append({
+                "name": skill.name,
+                "passed": result.passed,
+                "risk_score": result.risk_score,
+                "findings_count": len(result.findings),
+            })
+        except Exception as e:
+            logger.error("Scan failed for '%s': %s", skill.name, e)
+            results.append({
+                "name": skill.name,
+                "passed": None,
+                "error": str(e),
+            })
+
+    passed = sum(1 for r in results if r.get("passed") is True)
+    failed = sum(1 for r in results if r.get("passed") is False)
+    errored = sum(1 for r in results if r.get("passed") is None)
+
+    return {
+        "scanned": len(results),
+        "passed": passed,
+        "failed": failed,
+        "errors": errored,
+        "results": results,
+    }
+
+
+@router.get("/skills/scan/summary")
+async def scan_summary() -> dict[str, Any]:
+    """Get a summary of scan status across all skills (for the dashboard)."""
+    registry = get_skill_registry()
+    return registry.scan_summary()
+
+
+# ── Discovery settings ──────────────────────────────────────────────────────
+
+@router.get("/skills/discovery/{project_id}")
+async def get_skill_discovery(project_id: str) -> dict[str, str]:
+    """Get the skill discovery mode for a project."""
+    from secrets.vault import get_vault
+    vault = get_vault()
+    mode = vault.get_secret(f"skill_discovery_{project_id}") or "off"
+    return {"project_id": project_id, "skill_discovery": mode}
+
+
+@router.put("/skills/discovery/{project_id}")
+async def set_skill_discovery(project_id: str, mode: str = Query(...)) -> dict[str, str]:
+    """Set the skill discovery mode for a project (off / suggest / auto)."""
+    if mode not in ("off", "suggest", "auto"):
+        raise HTTPException(status_code=400, detail="Mode must be 'off', 'suggest', or 'auto'")
+    from secrets.vault import get_vault
+    vault = get_vault()
+    vault.set_secret(f"skill_discovery_{project_id}", mode)
+    logger.info("Skill discovery for project '%s' set to '%s'", project_id, mode)
+    return {"project_id": project_id, "skill_discovery": mode}
+
+
+# ── Quarantine list ──────────────────────────────────────────────────────────
+
+@router.get("/skills/quarantine/list")
+async def list_quarantined() -> dict[str, Any]:
+    """List skills in the quarantine directory."""
+    settings = get_settings()
+    quarantine_dir = settings.data_dir / "skills" / ".quarantine"
+    if not quarantine_dir.is_dir():
+        return {"quarantined": [], "count": 0}
+
+    quarantined = []
+    for d in sorted(quarantine_dir.iterdir()):
+        if d.is_dir():
+            manifest_path = d / "skill.json"
+            info: dict[str, Any] = {"name": d.name, "path": str(d)}
+            if manifest_path.exists():
+                try:
+                    import json
+                    raw = json.loads(manifest_path.read_text())
+                    info["description"] = raw.get("description", "")
+                    info["version"] = raw.get("version", "")
+                except Exception:
+                    pass
+            quarantined.append(info)
+
+    return {"quarantined": quarantined, "count": len(quarantined)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PARAMETERISED ROUTES (/skills/{skill_name}/...)
+# ═══════════════════════════════════════════════════════════════════════════
 
 # ── Get a single skill ──────────────────────────────────────────────────────
 
@@ -64,14 +204,24 @@ async def get_skill(skill_name: str) -> dict[str, Any]:
 
 @router.put("/skills/{skill_name}/toggle")
 async def toggle_skill(skill_name: str, req: SkillToggleRequest) -> dict[str, Any]:
-    """Enable or disable a skill for a specific project."""
+    """Enable or disable a skill for a specific project.
+
+    Non-bundled skills require a passing security scan before they can be
+    enabled. If the scan gate blocks enabling, the response includes the
+    reason and a 403 status.
+    """
     registry = get_skill_registry()
     skill = registry.get(skill_name)
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
 
     if req.enabled:
-        registry.enable_for_project(skill_name, req.project_id)
+        result = registry.enable_for_project(skill_name, req.project_id)
+        if not result["enabled"]:
+            raise HTTPException(
+                status_code=403,
+                detail=result.get("message", result.get("reason", "Cannot enable")),
+            )
     else:
         registry.disable_for_project(skill_name, req.project_id)
 
@@ -104,43 +254,7 @@ async def delete_skill(skill_name: str) -> dict[str, Any]:
     return {"skill": skill_name, **result}
 
 
-# ── Reload the skill registry ───────────────────────────────────────────────
-
-@router.post("/skills/reload")
-async def reload_skills() -> dict[str, Any]:
-    """Force-reload all skills from disk."""
-    registry = reload_skill_registry()
-    return {
-        "status": "reloaded",
-        "count": len(registry.list_all()),
-        "skills": registry.names(),
-    }
-
-
-# ── Get skill discovery setting for a project ───────────────────────────────
-
-@router.get("/skills/discovery/{project_id}")
-async def get_skill_discovery(project_id: str) -> dict[str, str]:
-    """Get the skill discovery mode for a project."""
-    from secrets.vault import get_vault
-    vault = get_vault()
-    mode = vault.get_secret(f"skill_discovery_{project_id}") or "off"
-    return {"project_id": project_id, "skill_discovery": mode}
-
-
-@router.put("/skills/discovery/{project_id}")
-async def set_skill_discovery(project_id: str, mode: str = Query(...)) -> dict[str, str]:
-    """Set the skill discovery mode for a project (off / suggest / auto)."""
-    if mode not in ("off", "suggest", "auto"):
-        raise HTTPException(status_code=400, detail="Mode must be 'off', 'suggest', or 'auto'")
-    from secrets.vault import get_vault
-    vault = get_vault()
-    vault.set_secret(f"skill_discovery_{project_id}", mode)
-    logger.info("Skill discovery for project '%s' set to '%s'", project_id, mode)
-    return {"project_id": project_id, "skill_discovery": mode}
-
-
-# ── Security scanning ──────────────────────────────────────────────────────
+# ── Per-skill scanning ──────────────────────────────────────────────────────
 
 @router.post("/skills/{skill_name}/scan")
 async def scan_skill_endpoint(
@@ -163,11 +277,12 @@ async def scan_skill_endpoint(
         run_ai_review=ai_review,
     )
 
-    # Persist the scan result on the manifest
+    # Persist the scan result in memory and on disk
     skill.manifest.security_scan = result
+    registry.save_scan_result(skill_name, result)
 
-    # If the scan failed, move to quarantine
-    if not result.passed:
+    # If the scan failed, move to quarantine (non-bundled only)
+    if not result.passed and not skill.is_bundled:
         quarantine_result = _quarantine_skill(skill_name, reason="scan_failed")
         return {
             "skill": skill_name,
@@ -199,13 +314,13 @@ async def get_scan_result(skill_name: str) -> dict[str, Any]:
     }
 
 
-# ── Quarantine ─────────────────────────────────────────────────────────────
+# ── Per-skill quarantine ────────────────────────────────────────────────────
 
 def _quarantine_skill(skill_name: str, reason: str = "") -> dict[str, Any]:
     """Move a user-installed skill to the quarantine directory.
 
     Bundled skills cannot be quarantined (they live in the repo); instead
-    they are disabled for all projects.
+    they are flagged only.
     """
     settings = get_settings()
     registry = get_skill_registry()
@@ -214,7 +329,6 @@ def _quarantine_skill(skill_name: str, reason: str = "") -> dict[str, Any]:
         return {"quarantined": False, "error": "not_found"}
 
     if skill.is_bundled:
-        # Can't move bundled skills — just log a warning
         logger.warning(
             "Bundled skill '%s' failed scan (reason: %s) — cannot quarantine, flagging only",
             skill_name, reason,
@@ -235,10 +349,7 @@ def _quarantine_skill(skill_name: str, reason: str = "") -> dict[str, Any]:
         if dest.exists():
             shutil.rmtree(dest)
         shutil.move(str(skill_dir), str(dest))
-
-        # Remove from registry
         registry.delete(skill_name)
-
         logger.info("Quarantined skill '%s' → %s (reason: %s)", skill_name, dest, reason)
         return {"quarantined": True, "path": str(dest), "reason": reason}
     except Exception as e:
@@ -255,32 +366,6 @@ async def quarantine_skill_endpoint(skill_name: str) -> dict[str, Any]:
     return {"skill": skill_name, **result}
 
 
-@router.get("/skills/quarantine/list")
-async def list_quarantined() -> dict[str, Any]:
-    """List skills in the quarantine directory."""
-    settings = get_settings()
-    quarantine_dir = settings.data_dir / "skills" / ".quarantine"
-    if not quarantine_dir.is_dir():
-        return {"quarantined": [], "count": 0}
-
-    quarantined = []
-    for d in sorted(quarantine_dir.iterdir()):
-        if d.is_dir():
-            manifest_path = d / "skill.json"
-            info: dict[str, Any] = {"name": d.name, "path": str(d)}
-            if manifest_path.exists():
-                try:
-                    import json
-                    raw = json.loads(manifest_path.read_text())
-                    info["description"] = raw.get("description", "")
-                    info["version"] = raw.get("version", "")
-                except Exception:
-                    pass
-            quarantined.append(info)
-
-    return {"quarantined": quarantined, "count": len(quarantined)}
-
-
 @router.post("/skills/{skill_name}/unquarantine")
 async def unquarantine_skill(skill_name: str) -> dict[str, Any]:
     """Restore a skill from quarantine back to user-installed skills."""
@@ -290,6 +375,14 @@ async def unquarantine_skill(skill_name: str) -> dict[str, Any]:
 
     if not quarantined_path.is_dir():
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not in quarantine")
+
+    # Block restoration if name collides with a bundled skill
+    registry = get_skill_registry()
+    if registry.is_bundled_name(skill_name):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot restore '{skill_name}' — a bundled skill with that name exists",
+        )
 
     user_skills_dir = settings.data_dir / "skills"
     dest = user_skills_dir / skill_name
@@ -301,7 +394,6 @@ async def unquarantine_skill(skill_name: str) -> dict[str, Any]:
 
     try:
         shutil.move(str(quarantined_path), str(dest))
-        # Reload registry to pick up the restored skill
         reload_skill_registry()
         logger.info("Restored skill '%s' from quarantine", skill_name)
         return {"skill": skill_name, "restored": True}

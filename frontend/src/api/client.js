@@ -186,6 +186,9 @@ export const skillsApi = {
   scan: (skillName, aiReview = true) =>
     api.post(`/api/skills/${skillName}/scan`, null, { params: { ai_review: aiReview } }),
   getScan: (skillName) => api.get(`/api/skills/${skillName}/scan`),
+  scanAll: (aiReview = false) =>
+    api.post('/api/skills/scan/all', null, { params: { ai_review: aiReview } }),
+  scanSummary: () => api.get('/api/skills/scan/summary'),
   quarantine: (skillName) => api.post(`/api/skills/${skillName}/quarantine`),
   listQuarantined: () => api.get('/api/skills/quarantine/list'),
   unquarantine: (skillName) => api.post(`/api/skills/${skillName}/unquarantine`),

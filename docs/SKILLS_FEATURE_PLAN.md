@@ -838,6 +838,13 @@ All 12 backend + frontend checklist items are implemented and all 8 planned bund
 - [x] Scan results display in frontend ✅ ScanBadge component (clean/warnings/failed/unscanned), ScanResults panel with severity-colored findings, scan button on each skill card, per-skill scan trigger
 - [x] Runtime sandboxing in `backend/skills/executor.py` ✅ Subprocess execution (never imported), env filtering (allowlist only), path traversal prevention, interpreter detection, timeout/output limits, no shell=True
 
+**Security Hardening (pre-Phase 3 gate):**
+- [x] Scan-before-enable gate ✅ Non-bundled skills must have a passing scan before `enable_for_project()` allows enabling. Returns 403 with reason if scan is missing or failed.
+- [x] Scan persistence with content hashing ✅ Scan results persisted to `.scan_results/` as JSON, tagged with SHA-256 content hash. Auto-invalidated when any skill file changes. Survives registry reloads.
+- [x] Scan-all + centralized dashboard ✅ `POST /api/skills/scan/all` bulk scan endpoint, `GET /api/skills/scan/summary` for dashboard data. New `SkillScanDashboard.jsx` with summary count cards (total/passed/failed/unscanned), skills table sorted by severity, quarantine section with restore button. Tabbed SkillsPage (Library | Security).
+- [x] Name masquerade prevention ✅ `_bundled_names` set in registry tracks all bundled skill names. User-installed skills with colliding names are blocked at load time with logged warning. `is_bundled_name()` check on unquarantine prevents restoring over a bundled skill (409 Conflict).
+- [x] Bundled flag spoofing prevention ✅ `is_bundled` flag set exclusively by the loader based on source directory — never read from `skill.json` content. Prevents imported skills from claiming bundled status to bypass scan gates.
+
 ### Phase 3: Hub Import (1-2 weeks)
 **Goal: Import skills from external hubs**
 
