@@ -87,25 +87,24 @@ export default function Layout() {
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-800">
-          <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
-            <Bot className="w-5 h-5 text-white" />
+        {/* Logo + Project switcher */}
+        <div className="border-b border-gray-800">
+          <div className="flex items-center gap-3 px-4 py-2">
+            <div className="w-7 h-7 bg-brand-600 rounded-lg flex items-center justify-center">
+              <Bot className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h1 className="font-bold text-white text-sm leading-tight">Pantheon</h1>
+              <p className="text-[10px] text-gray-500 leading-tight">AI Agent Framework</p>
+            </div>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden ml-auto text-gray-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <div>
-            <h1 className="font-bold text-white text-sm">Pantheon</h1>
-            <p className="text-xs text-gray-500">AI Agent Framework</p>
-          </div>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden ml-auto text-gray-400 hover:text-white"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Project switcher */}
-        <div className="px-3 py-1.5 border-b border-gray-800" ref={projectMenuRef}>
+          <div className="px-3 pb-2" ref={projectMenuRef}>
           <button
             onClick={() => setProjectMenuOpen(o => !o)}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md bg-gray-800 hover:bg-gray-750 text-xs transition-colors group"
@@ -133,6 +132,7 @@ export default function Layout() {
               ))}
             </div>
           )}
+          </div>
         </div>
 
         {/* Navigation */}
