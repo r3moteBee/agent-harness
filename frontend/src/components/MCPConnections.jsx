@@ -243,6 +243,102 @@ function ConnectionUsagePanel({ serviceType }) {
   )
 }
 
+// ── Dev Rate Limit Control ─────────────────────────────────────────────────
+
+function DevRateLimitControl({ conn, onUpdate }) {
+  const isDevMode = (conn.request_interval_ms || 1000) > 1000
+  const [editing, setEditing] = useState(false)
+  const [seconds, setSeconds] = useState(String((conn.request_interval_ms || 1000) / 1000))
+  const addNotification = useStore((s) => s.addNotification)
+
+  const applyInterval = async (ms) => {
+    try {
+      await onUpdate(conn.name, { request_interval_ms: ms })
+    } catch (err) {
+      addNotification({ type: 'error', message: err.message })
+    }
+  }
+
+  const handleToggle = () => {
+    if (isDevMode) {
+      // Turn off → back to 1s
+      setSeconds('1')
+      applyInterval(1000)
+    } else {
+      // Turn on → 5s default
+      setSeconds('5')
+      applyInterval(5000)
+    }
+  }
+
+  const handleSecondsBlur = () => {
+    const val = parseFloat(seconds)
+    if (!isNaN(val) && val >= 0.5 && val <= 30) {
+      applyInterval(Math.round(val * 1000))
+    } else {
+      setSeconds(String((conn.request_interval_ms || 1000) / 1000))
+    }
+    setEditing(false)
+  }
+
+  // Sync local state when prop changes
+  useEffect(() => {
+    if (!editing) setSeconds(String((conn.request_interval_ms || 1000) / 1000))
+  }, [conn.request_interval_ms])
+
+  return (
+    <div className="flex items-center justify-between pt-2 border-t border-gray-700">
+      <div className="flex items-center gap-2">
+        <ShieldAlert className={`w-3.5 h-3.5 ${isDevMode ? 'text-amber-400' : 'text-gray-600'}`} />
+        <div>
+          <span className="text-xs text-gray-300">Dev rate limiting</span>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            {isDevMode ? (
+              editing ? (
+                <input
+                  type="number"
+                  min="0.5"
+                  max="30"
+                  step="0.5"
+                  value={seconds}
+                  onChange={(e) => setSeconds(e.target.value)}
+                  onBlur={handleSecondsBlur}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSecondsBlur()}
+                  autoFocus
+                  className="w-14 bg-gray-900 border border-amber-600 rounded px-1.5 py-0.5 text-[10px] font-mono text-amber-400 focus:outline-none"
+                />
+              ) : (
+                <button
+                  onClick={() => setEditing(true)}
+                  className="text-[10px] font-mono text-amber-400 hover:text-amber-300 underline decoration-dotted"
+                  title="Click to edit interval"
+                >
+                  {seconds}s
+                </button>
+              )
+            ) : (
+              <span className="text-[10px] text-gray-600">Off (1s default)</span>
+            )}
+            {isDevMode && !editing && (
+              <span className="text-[10px] text-gray-600">between requests</span>
+            )}
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={handleToggle}
+        className={`relative w-9 h-5 rounded-full transition-colors ${
+          isDevMode ? 'bg-amber-600' : 'bg-gray-600'
+        }`}
+      >
+        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+          isDevMode ? 'translate-x-4' : ''
+        }`} />
+      </button>
+    </div>
+  )
+}
+
 // ── Connection Card ────────────────────────────────────────────────────────
 
 function ConnectionCard({ conn, onRemove, onTest, onReconnect, onUpdate, onRefresh, allTools }) {
@@ -382,37 +478,8 @@ function ConnectionCard({ conn, onRemove, onTest, onReconnect, onUpdate, onRefre
             <p className="text-xs text-gray-500">Not connected — click the test button to connect.</p>
           )}
 
-          {/* Request throttle control */}
-          <div className="pt-2 border-t border-gray-700">
-            <div className="flex items-center gap-2 mb-2">
-              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-xs text-gray-300">Request throttle</span>
-              <span className="text-[10px] font-mono text-amber-400">{((conn.request_interval_ms || 1000) / 1000).toFixed(1)}s</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] text-gray-600 w-6">1s</span>
-              <input
-                type="range"
-                min={1000}
-                max={10000}
-                step={500}
-                value={conn.request_interval_ms || 1000}
-                onChange={async (e) => {
-                  const newInterval = parseInt(e.target.value)
-                  try {
-                    await onUpdate(conn.name, { request_interval_ms: newInterval })
-                  } catch (err) {
-                    addNotification({ type: 'error', message: err.message })
-                  }
-                }}
-                className="flex-1 h-1.5 accent-amber-500 cursor-pointer"
-              />
-              <span className="text-[10px] text-gray-600 w-6">10s</span>
-            </div>
-            <p className="text-[10px] text-gray-600 mt-1">
-              Min interval between requests. Increase for free/dev-tier API keys to avoid rate limits.
-            </p>
-          </div>
+          {/* Dev rate limiting */}
+          <DevRateLimitControl conn={conn} onUpdate={onUpdate} />
 
           {/* Metered service usage — inline in the card */}
           {meteredType && conn.connected && (
