@@ -294,10 +294,80 @@ function SkillCard({ skill, projectId, onToggle, onDelete, onScan }) {
 
 // ── Main Skills component ───────────────────────────────────────────────────
 
+// ── Override password modal ─────────────────────────────────────────────────
+
+function OverrideModal({ skillName, onConfirm, onCancel }) {
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!password.trim()) {
+      setError('Password is required')
+      return
+    }
+    setSubmitting(true)
+    setError('')
+    const result = await onConfirm(password)
+    if (result?.error) {
+      setError(result.error)
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 w-full max-w-md p-5 space-y-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-white">Security Override</h3>
+            <p className="text-xs text-gray-400 mt-1">
+              <strong>{skillName}</strong> failed its security scan. Enter the security
+              override password to force-enable it. This action will be logged.
+            </p>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Override Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError('') }}
+            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+            placeholder="Enter security override password"
+            autoFocus
+            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-brand-500"
+          />
+          {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 text-xs rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || !password.trim()}
+            className="px-3 py-1.5 text-xs rounded bg-amber-700 text-white hover:bg-amber-600 transition-colors disabled:opacity-50"
+          >
+            {submitting ? 'Verifying...' : 'Force Enable'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Skills component ───────────────────────────────────────────────────
+
 export default function Skills() {
   const [skills, setSkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [reloading, setReloading] = useState(false)
+  const [overrideTarget, setOverrideTarget] = useState(null) // skill name pending override
   const activeProject = useStore((s) => s.activeProject)
   const addNotification = useStore((s) => s.addNotification)
 
@@ -335,7 +405,37 @@ export default function Skills() {
       addNotification({ type: 'success', message: `${skillName} ${enabled ? 'enabled' : 'disabled'}` })
       await loadSkills()
     } catch (err) {
-      addNotification({ type: 'error', message: err.message })
+      const status = err.response?.status
+      const detail = err.response?.data?.detail || err.message
+      if (status === 403 && enabled && detail.includes('security scan')) {
+        // Check if override password is configured, then offer force-enable
+        try {
+          const statusRes = await skillsApi.overrideStatus()
+          if (statusRes.data.configured) {
+            setOverrideTarget(skillName)
+            return
+          }
+        } catch (_) { /* ignore */ }
+        addNotification({ type: 'error', message: `${detail} Configure a security override password in Settings to force-enable.` })
+      } else {
+        addNotification({ type: 'error', message: detail })
+      }
+    }
+  }
+
+  const handleForceEnable = async (password) => {
+    try {
+      await skillsApi.toggle(overrideTarget, projectId, true, {
+        forceEnable: true,
+        overridePassword: password,
+      })
+      addNotification({ type: 'warning', message: `${overrideTarget} force-enabled via security override` })
+      setOverrideTarget(null)
+      await loadSkills()
+      return {}
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.message
+      return { error: detail }
     }
   }
 
@@ -421,6 +521,15 @@ export default function Skills() {
           </div>
         )}
       </div>
+
+      {/* Override password modal */}
+      {overrideTarget && (
+        <OverrideModal
+          skillName={overrideTarget}
+          onConfirm={handleForceEnable}
+          onCancel={() => setOverrideTarget(null)}
+        />
+      )}
     </div>
   )
 }

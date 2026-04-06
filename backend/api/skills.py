@@ -25,6 +25,8 @@ router = APIRouter()
 class SkillToggleRequest(BaseModel):
     project_id: str
     enabled: bool
+    force_enable: bool = False
+    override_password: str | None = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -177,6 +179,17 @@ async def list_quarantined() -> dict[str, Any]:
     return {"quarantined": quarantined, "count": len(quarantined)}
 
 
+# ── Security override status ────────────────────────────────────────────────
+
+@router.get("/skills/security/override-status")
+async def override_status() -> dict[str, Any]:
+    """Check whether a security override password is configured."""
+    from secrets.vault import get_vault
+    vault = get_vault()
+    pw = vault.get_secret("skill_security_override_password")
+    return {"configured": bool(pw)}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # PARAMETERISED ROUTES (/skills/{skill_name}/...)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -216,7 +229,25 @@ async def toggle_skill(skill_name: str, req: SkillToggleRequest) -> dict[str, An
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
 
     if req.enabled:
-        result = registry.enable_for_project(skill_name, req.project_id)
+        force = False
+        if req.force_enable:
+            # Verify security override password from vault
+            from secrets.vault import get_vault
+            vault = get_vault()
+            stored_pw = vault.get_secret("skill_security_override_password")
+            if not stored_pw:
+                raise HTTPException(
+                    status_code=403,
+                    detail="No security override password has been configured. Set one in Settings before using force enable.",
+                )
+            if not req.override_password or req.override_password != stored_pw:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Incorrect security override password.",
+                )
+            force = True
+
+        result = registry.enable_for_project(skill_name, req.project_id, force=force)
         if not result["enabled"]:
             raise HTTPException(
                 status_code=403,

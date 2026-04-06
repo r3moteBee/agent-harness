@@ -231,10 +231,15 @@ class SkillRegistry:
             if skill.is_enabled_for(project_id)
         ]
 
-    def enable_for_project(self, skill_name: str, project_id: str) -> dict[str, Any]:
+    def enable_for_project(
+        self, skill_name: str, project_id: str, *, force: bool = False
+    ) -> dict[str, Any]:
         """Enable a skill for a specific project (remove from disabled list).
 
         Non-bundled skills require a passing scan before they can be enabled.
+        If force=True, the scan gate is bypassed (caller must verify the
+        security override password before setting this flag).
+
         Returns {"enabled": True/False, "reason": str}.
         """
         self.ensure_loaded()
@@ -243,7 +248,7 @@ class SkillRegistry:
             return {"enabled": False, "reason": "not_found"}
 
         # Scan gate: non-bundled skills must pass a scan before enabling
-        if not skill.is_bundled:
+        if not skill.is_bundled and not force:
             scan = skill.manifest.security_scan
             if scan is None:
                 return {
@@ -256,12 +261,22 @@ class SkillRegistry:
                     "enabled": False,
                     "reason": "scan_failed",
                     "message": f"This skill failed its security scan (risk score: {scan.risk_score}). Review findings and address issues before enabling.",
+                    "overridable": True,
                 }
 
         if project_id in skill.disabled_projects:
             skill.disabled_projects.remove(project_id)
         self._save_skill_state()
-        return {"enabled": True, "reason": "ok"}
+
+        result: dict[str, Any] = {"enabled": True, "reason": "ok"}
+        if force:
+            result["override"] = True
+            logger.warning(
+                "Security override: skill '%s' force-enabled for project '%s' despite failed scan",
+                skill_name,
+                project_id,
+            )
+        return result
 
     def disable_for_project(self, skill_name: str, project_id: str) -> bool:
         """Disable a skill for a specific project (add to disabled list)."""

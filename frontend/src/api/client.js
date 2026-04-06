@@ -179,8 +179,13 @@ export const skillsApi = {
   list: (projectId) =>
     api.get('/api/skills', { params: { project_id: projectId } }),
   get: (skillName) => api.get(`/api/skills/${skillName}`),
-  toggle: (skillName, projectId, enabled) =>
-    api.put(`/api/skills/${skillName}/toggle`, { project_id: projectId, enabled }),
+  toggle: (skillName, projectId, enabled, { forceEnable, overridePassword } = {}) =>
+    api.put(`/api/skills/${skillName}/toggle`, {
+      project_id: projectId,
+      enabled,
+      ...(forceEnable && { force_enable: true, override_password: overridePassword }),
+    }),
+  overrideStatus: () => api.get('/api/skills/security/override-status'),
   reload: () => api.post('/api/skills/reload'),
   delete: (skillName) => api.delete(`/api/skills/${skillName}`),
   scan: (skillName, aiReview = true) =>
