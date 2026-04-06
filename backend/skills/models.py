@@ -154,6 +154,7 @@ class LoadedSkill(BaseModel):
     skill_dir: str = ""
     is_bundled: bool = False
     enabled_projects: list[str] = Field(default_factory=list)
+    disabled_projects: list[str] = Field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -167,6 +168,13 @@ class LoadedSkill(BaseModel):
     def tags(self) -> list[str]:
         return self.manifest.tags
 
+    def is_enabled_for(self, project_id: str) -> bool:
+        """Check if this skill is enabled for a given project.
+
+        Logic: enabled by default for all projects unless explicitly disabled.
+        """
+        return project_id not in self.disabled_projects
+
     def to_summary(self) -> dict[str, Any]:
         """Return a lightweight summary for API responses."""
         return {
@@ -177,12 +185,13 @@ class LoadedSkill(BaseModel):
             "tags": self.manifest.tags,
             "triggers": self.manifest.triggers,
             "is_bundled": self.is_bundled,
-            "enabled_projects": self.enabled_projects,
+            "disabled_projects": self.disabled_projects,
             "schedulable": self.manifest.pantheon.schedulable.enabled,
             "project_aware": self.manifest.pantheon.project_aware,
             "memory_reads": self.manifest.pantheon.memory.reads,
             "memory_writes": self.manifest.pantheon.memory.writes,
             "evolution_enabled": self.manifest.pantheon.evolution.enabled,
+            "scan_result": self.manifest.security_scan.model_dump() if self.manifest.security_scan else None,
         }
 
 

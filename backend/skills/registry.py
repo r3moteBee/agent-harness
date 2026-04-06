@@ -87,39 +87,39 @@ class SkillRegistry:
                 logger.warning("Failed to read instructions for %s: %s", skill_dir.name, e)
 
         # Load per-project enable/disable state
-        enabled_projects = self._load_enabled_projects(manifest.name)
+        disabled_projects = self._load_disabled_projects(manifest.name)
 
         return LoadedSkill(
             manifest=manifest,
             instructions=instructions,
             skill_dir=str(skill_dir),
             is_bundled=is_bundled,
-            enabled_projects=enabled_projects,
+            disabled_projects=disabled_projects,
         )
 
-    def _load_enabled_projects(self, skill_name: str) -> list[str]:
-        """Load which projects have this skill enabled.
+    def _load_disabled_projects(self, skill_name: str) -> list[str]:
+        """Load which projects have this skill disabled.
 
-        For Phase 1, all skills are enabled for all projects by default.
-        Per-project state will be stored in a lightweight JSON sidecar
-        once the project settings API is extended.
+        Skills are enabled for all projects by default.  Only projects
+        that explicitly disabled a skill appear in disabled_projects.
         """
         state_file = _USER_SKILLS_DIR / ".skill_state.json"
         if state_file.exists():
             try:
                 state = json.loads(state_file.read_text(encoding="utf-8"))
-                return state.get(skill_name, {}).get("enabled_projects", [])
+                return state.get(skill_name, {}).get("disabled_projects", [])
             except Exception:
                 pass
         return []
 
     def _save_skill_state(self) -> None:
-        """Persist per-skill state (enabled projects) to disk."""
+        """Persist per-skill state (disabled projects) to disk."""
         state: dict[str, Any] = {}
         for name, skill in self._skills.items():
-            state[name] = {
-                "enabled_projects": skill.enabled_projects,
-            }
+            if skill.disabled_projects:
+                state[name] = {
+                    "disabled_projects": skill.disabled_projects,
+                }
         state_file = _USER_SKILLS_DIR / ".skill_state.json"
         _USER_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
         state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
@@ -144,37 +144,73 @@ class SkillRegistry:
     def list_for_project(self, project_id: str) -> list[LoadedSkill]:
         """List skills available for a project.
 
-        Phase 1 logic: A skill is available if it has no enabled_projects
-        list (globally available) or the project is in the list.
+        A skill is available unless it has been explicitly disabled
+        for this project.
         """
         self.ensure_loaded()
-        results = []
-        for skill in self._skills.values():
-            if not skill.enabled_projects or project_id in skill.enabled_projects:
-                results.append(skill)
-        return results
+        return [
+            skill for skill in self._skills.values()
+            if skill.is_enabled_for(project_id)
+        ]
 
     def enable_for_project(self, skill_name: str, project_id: str) -> bool:
-        """Enable a skill for a specific project."""
+        """Enable a skill for a specific project (remove from disabled list)."""
         self.ensure_loaded()
         skill = self._skills.get(skill_name)
         if not skill:
             return False
-        if project_id not in skill.enabled_projects:
-            skill.enabled_projects.append(project_id)
+        if project_id in skill.disabled_projects:
+            skill.disabled_projects.remove(project_id)
         self._save_skill_state()
         return True
 
     def disable_for_project(self, skill_name: str, project_id: str) -> bool:
-        """Disable a skill for a specific project."""
+        """Disable a skill for a specific project (add to disabled list)."""
         self.ensure_loaded()
         skill = self._skills.get(skill_name)
         if not skill:
             return False
-        if project_id in skill.enabled_projects:
-            skill.enabled_projects.remove(project_id)
+        if project_id not in skill.disabled_projects:
+            skill.disabled_projects.append(project_id)
         self._save_skill_state()
         return True
+
+    def delete(self, skill_name: str) -> dict[str, Any]:
+        """Delete a skill from the registry and disk.
+
+        Bundled skills cannot be deleted from disk (they live in the repo),
+        but they can be removed from the registry. User-installed skills
+        are deleted from data/skills/.
+
+        Returns a dict with status info.
+        """
+        self.ensure_loaded()
+        skill = self._skills.get(skill_name)
+        if not skill:
+            return {"deleted": False, "error": "not_found"}
+
+        is_bundled = skill.is_bundled
+        skill_dir = Path(skill.skill_dir)
+
+        # Remove from registry
+        del self._skills[skill_name]
+        self._save_skill_state()
+
+        # Delete from disk only if user-installed
+        if not is_bundled and skill_dir.is_dir():
+            import shutil
+            shutil.rmtree(skill_dir, ignore_errors=True)
+            logger.info("Deleted user skill '%s' from %s", skill_name, skill_dir)
+            return {"deleted": True, "was_bundled": False}
+
+        if is_bundled:
+            logger.info(
+                "Removed bundled skill '%s' from registry (files preserved in %s)",
+                skill_name, skill_dir,
+            )
+            return {"deleted": True, "was_bundled": True, "note": "Bundled skill removed from registry. Files preserved on disk. Reload to restore."}
+
+        return {"deleted": True, "was_bundled": is_bundled}
 
     def names(self) -> list[str]:
         """Get all skill names."""

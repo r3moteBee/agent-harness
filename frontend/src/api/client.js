@@ -182,6 +182,13 @@ export const skillsApi = {
   toggle: (skillName, projectId, enabled) =>
     api.put(`/api/skills/${skillName}/toggle`, { project_id: projectId, enabled }),
   reload: () => api.post('/api/skills/reload'),
+  delete: (skillName) => api.delete(`/api/skills/${skillName}`),
+  scan: (skillName, aiReview = true) =>
+    api.post(`/api/skills/${skillName}/scan`, null, { params: { ai_review: aiReview } }),
+  getScan: (skillName) => api.get(`/api/skills/${skillName}/scan`),
+  quarantine: (skillName) => api.post(`/api/skills/${skillName}/quarantine`),
+  listQuarantined: () => api.get('/api/skills/quarantine/list'),
+  unquarantine: (skillName) => api.post(`/api/skills/${skillName}/unquarantine`),
   getDiscovery: (projectId) => api.get(`/api/skills/discovery/${projectId}`),
   setDiscovery: (projectId, mode) =>
     api.put(`/api/skills/discovery/${projectId}`, null, { params: { mode } }),

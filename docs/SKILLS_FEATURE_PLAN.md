@@ -770,20 +770,20 @@ The `run_autonomous` method in `agent/core.py` checks the task's `skill_policy` 
 **Goal: Skills load, work with the agent, and are usable from chat**
 
 Backend:
-- [ ] `backend/skills/models.py` — Pydantic models for SkillManifest, ScanResult
-- [ ] `backend/skills/registry.py` — Load skills from `skills/` (bundled) and `data/skills/` (user-installed), maintain index
-- [ ] `backend/skills/resolver.py` — Basic keyword + embedding matching
-- [ ] Integrate resolver into `agent/core.py` — inject matched skill instructions into system prompt
-- [ ] `backend/api/skills.py` — CRUD endpoints
-- [ ] Extend `backend/api/chat.py` — parse `/skill-name` prefix from messages, resolve to skill, inject into agent context
-- [ ] Add `skill_discovery` to project settings model (`off` / `suggest` / `auto`, default `off`)
+- [x] `backend/skills/models.py` — Pydantic models for SkillManifest, ScanResult ✅ Full two-layer schema with PantheonExtensions, SkillDiscoveryMode enum, ProjectSkillSettings
+- [x] `backend/skills/registry.py` — Load skills from `skills/` (bundled) and `data/skills/` (user-installed), maintain index ✅ Singleton registry with per-project enable/disable, state persistence to `.skill_state.json`
+- [x] `backend/skills/resolver.py` — Basic keyword + embedding matching ✅ Keyword scoring with trigger/tag/name/description matching. Embedding matching deferred to Phase 2 (noted in code)
+- [x] Integrate resolver into `agent/core.py` — inject matched skill instructions into system prompt ✅ `AgentCore` accepts `skill_context` and `active_skill_name`, injects via `extra_context` param
+- [x] `backend/api/skills.py` — CRUD endpoints ✅ GET list, GET detail, PUT toggle, POST reload, GET/PUT discovery mode
+- [x] Extend `backend/api/chat.py` — parse `/skill-name` prefix from messages, resolve to skill, inject into agent context ✅ Full integration: explicit `/` invocation, auto-discovery with suggest/auto modes, `skill_active` and `skill_suggestion` WebSocket events
+- [x] Add `skill_discovery` to project settings model (`off` / `suggest` / `auto`, default `off`) ✅ Stored via vault per-project, `SkillDiscoveryMode` enum in models, API endpoints in skills.py
 
 Frontend:
-- [ ] `frontend/pages/Skills.jsx` — Basic library view with enable/disable per project
-- [ ] `frontend/components/SkillPicker.jsx` — Autocomplete dropdown triggered by `/` in chat input
-- [ ] Extend `Chat.jsx` — `/` prefix detection opens SkillPicker; show skill name badge when a skill is active in a response
-- [ ] Add **Auto-Skill** toggle to chat header bar (alongside Personality and Focus toggles), cycling off → suggest → auto
-- [ ] Store Auto-Skill toggle state per project via project settings API
+- [x] `frontend/pages/Skills.jsx` — Basic library view with enable/disable per project ✅ SkillCard components with expand/collapse, trigger/parameter/instruction detail view, per-project toggle, reload button
+- [x] `frontend/components/SkillPicker.jsx` — Autocomplete dropdown triggered by `/` in chat input ✅ Full autocomplete with keyboard nav (↑↓/Tab/Enter/Esc), tag display, query filtering
+- [x] Extend `Chat.jsx` — `/` prefix detection opens SkillPicker; show skill name badge when a skill is active in a response ✅ `/` detection triggers SkillPicker, `activeSkillBadge` state shown in UI, `skill_suggestion` notifications
+- [x] Add **Auto-Skill** toggle to chat header bar (alongside Personality and Focus toggles), cycling off → suggest → auto ✅ Click-to-cycle toggle with off/suggest/auto states, color-coded (brand for auto, amber for suggest)
+- [x] Store Auto-Skill toggle state per project via project settings API ✅ Uses `skillsApi.getDiscovery`/`setDiscovery` backed by per-project vault storage
 
 Bundled Starter Skills (in `skills/` at repo root — shipped with Pantheon):
 - [x] `web-research` — Search the web and produce a structured summary with sources
@@ -797,14 +797,46 @@ Bundled Starter Skills (in `skills/` at repo root — shipped with Pantheon):
 
 These 8 skills cover the key feature dimensions: simple instruction-only skills, project-aware skills, memory-reading skills, memory-writing skills, and a schedulable skill. They provide immediate test coverage for the Skills.jsx library page, `/` invocation in chat, and the Auto-Skill resolver.
 
+Bonus skill (not in original plan):
+- [x] `weather` — Weather lookup skill (10 triggers, extra test coverage for resolver)
+
+Additional infrastructure delivered (not in Phase 1 plan but supports skills):
+- [x] `backend/api/mcp.py` — Full MCP connections API (list, add, update, remove, tool toggle, test)
+- [x] `backend/mcp_client/` — MCP client with `manager.py`, `client.py`, Tavily credit tracking
+- [x] `frontend/src/pages/MCPPage.jsx` + `MCPConnections.jsx` — MCP management UI
+- [x] `frontend/src/api/client.js` — `skillsApi` with all CRUD + discovery endpoints
+
+---
+
+### Phase 1 Completion Assessment (2026-04-05)
+
+**Status: ✅ PHASE 1 COMPLETE — Ready to proceed to Phase 2**
+
+All 12 backend + frontend checklist items are implemented and all 8 planned bundled skills (plus 1 bonus) are shipped. The implementation matches the plan spec closely:
+
+| Category | Planned | Done | Notes |
+|----------|---------|------|-------|
+| Backend modules | 7 | 7 | Resolver uses keyword matching only (embedding deferred as noted) |
+| Frontend components | 5 | 5 | Full SkillPicker, library, chat integration, toggle |
+| Bundled skills | 8 | 9 | +1 bonus `weather` skill |
+| MCP integration | — | ✅ | Not in Phase 1 plan but delivered (supports Phase 3 hub imports) |
+
+**Minor gaps / items to carry forward:**
+1. Embedding-based resolver matching (noted as Phase 2 in resolver.py) — keyword matching works but embedding would improve auto-discovery accuracy
+2. No `DELETE /api/skills/:name` endpoint yet — only toggle enable/disable exists
+3. No `POST /api/skills` (create) or `PUT /api/skills/:name` (update) endpoints — these are needed for Phase 4 (editor) but not Phase 1
+4. `skill_discovery` stored in vault rather than project settings model — functional but should migrate to `projects.json` for consistency
+
+---
+
 ### Phase 2: Security Scanner (1-2 weeks)
 **Goal: Skills are scanned before activation**
 
-- [ ] `backend/skills/scanner.py` — Layer 1 (static) + Layer 2 (capability) analysis
-- [ ] AI review integration (Layer 3) using existing LLM provider
-- [ ] Quarantine flow for failed scans
-- [ ] Scan results display in frontend
-- [ ] Runtime sandboxing in `backend/skills/executor.py`
+- [x] `backend/skills/scanner.py` — Layer 1 (static) + Layer 2 (capability) analysis ✅ Pattern matching for dangerous code (eval/exec/shell injection/network/env access/obfuscation), file type whitelist/blocklist, size limits, manifest validation, capability mismatch detection
+- [x] AI review integration (Layer 3) using existing LLM provider ✅ LLM-based semantic analysis of scripts, cross-references instructions vs code behaviour, returns structured JSON findings with risk assessment
+- [x] Quarantine flow for failed scans ✅ Auto-quarantine on scan failure, `POST /api/skills/:name/quarantine`, `GET /api/skills/quarantine/list`, `POST /api/skills/:name/unquarantine`, `.quarantine/` directory in data/skills/
+- [x] Scan results display in frontend ✅ ScanBadge component (clean/warnings/failed/unscanned), ScanResults panel with severity-colored findings, scan button on each skill card, per-skill scan trigger
+- [x] Runtime sandboxing in `backend/skills/executor.py` ✅ Subprocess execution (never imported), env filtering (allowlist only), path traversal prevention, interpreter detection, timeout/output limits, no shell=True
 
 ### Phase 3: Hub Import (1-2 weeks)
 **Goal: Import skills from external hubs**

@@ -1,14 +1,104 @@
 import React, { useState, useEffect } from 'react'
-import { Zap, RefreshCw, ChevronDown, ChevronRight, Tag, Brain, Clock, Shield, BookOpen, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Zap, RefreshCw, ChevronDown, ChevronRight, Brain, Clock, Shield, BookOpen, ToggleLeft, ToggleRight, Trash2, AlertTriangle, ShieldCheck, ShieldAlert, ShieldX, ScanSearch } from 'lucide-react'
 import { useStore } from '../store'
 import { skillsApi } from '../api/client'
 
-function SkillCard({ skill, projectId, onToggle }) {
+// ── Scan badge component ────────────────────────────────────────────────────
+
+function ScanBadge({ scanResult }) {
+  if (!scanResult) {
+    return (
+      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-500" title="Not scanned">
+        unscanned
+      </span>
+    )
+  }
+
+  if (scanResult.passed) {
+    const score = scanResult.risk_score || 0
+    if (score === 0) {
+      return (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-900/60 text-green-400 flex items-center gap-1" title={`Risk: ${score}`}>
+          <ShieldCheck className="w-3 h-3" /> clean
+        </span>
+      )
+    }
+    return (
+      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-400 flex items-center gap-1" title={`Risk: ${score}`}>
+        <ShieldAlert className="w-3 h-3" /> warnings
+      </span>
+    )
+  }
+
+  return (
+    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 flex items-center gap-1" title={`Risk: ${scanResult.risk_score}`}>
+      <ShieldX className="w-3 h-3" /> failed
+    </span>
+  )
+}
+
+// ── Scan results panel ──────────────────────────────────────────────────────
+
+function ScanResults({ scanResult }) {
+  if (!scanResult) return null
+
+  const { passed, risk_score, findings, scanned_at, scanner_version } = scanResult
+  const criticals = findings?.filter((f) => f.severity === 'critical') || []
+  const warnings = findings?.filter((f) => f.severity === 'warning') || []
+  const infos = findings?.filter((f) => f.severity === 'info') || []
+
+  const severityColor = {
+    critical: 'text-red-400 bg-red-900/30',
+    warning: 'text-amber-400 bg-amber-900/30',
+    info: 'text-blue-400 bg-blue-900/30',
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-medium text-gray-400 flex items-center gap-1">
+          <ScanSearch className="w-3 h-3" /> Security Scan
+        </h4>
+        <div className="flex items-center gap-2 text-[10px] text-gray-600">
+          <span>v{scanner_version}</span>
+          {scanned_at && <span>{new Date(scanned_at).toLocaleString()}</span>}
+        </div>
+      </div>
+
+      <div className={`flex items-center gap-3 text-xs px-3 py-2 rounded ${passed ? 'bg-green-900/20 text-green-400' : 'bg-red-900/20 text-red-400'}`}>
+        {passed ? <ShieldCheck className="w-4 h-4" /> : <ShieldX className="w-4 h-4" />}
+        <span className="font-medium">{passed ? 'PASSED' : 'FAILED'}</span>
+        <span className="text-gray-500">Risk score: {risk_score}</span>
+        <span className="text-gray-500">
+          {criticals.length} critical · {warnings.length} warnings · {infos.length} info
+        </span>
+      </div>
+
+      {findings?.length > 0 && (
+        <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-thin">
+          {findings.map((f, i) => (
+            <div key={i} className={`flex items-start gap-2 text-[11px] px-2 py-1.5 rounded ${severityColor[f.severity] || severityColor.info}`}>
+              <span className="font-mono uppercase font-bold w-14 flex-shrink-0">{f.severity}</span>
+              <span className="text-gray-300 flex-1">{f.message}</span>
+              {f.file && <span className="font-mono text-gray-600 flex-shrink-0">{f.file}{f.line ? `:${f.line}` : ''}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Skill card component ────────────────────────────────────────────────────
+
+function SkillCard({ skill, projectId, onToggle, onDelete, onScan }) {
   const [expanded, setExpanded] = useState(false)
   const [details, setDetails] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [scanning, setScanning] = useState(false)
 
-  const isEnabled = !skill.enabled_projects?.length || skill.enabled_projects.includes(projectId)
+  const isEnabled = !skill.disabled_projects?.includes(projectId)
 
   const handleExpand = async () => {
     if (!expanded && !details) {
@@ -24,6 +114,19 @@ function SkillCard({ skill, projectId, onToggle }) {
     setExpanded(!expanded)
   }
 
+  const handleScan = async () => {
+    setScanning(true)
+    try {
+      const res = await onScan(skill.name)
+      // Refresh details to pick up scan result
+      const detailRes = await skillsApi.get(skill.name)
+      setDetails(detailRes.data)
+    } catch (err) {
+      console.error('Scan failed:', err)
+    }
+    setScanning(false)
+  }
+
   return (
     <div className={`border rounded-lg overflow-hidden ${isEnabled ? 'border-gray-700 bg-gray-800' : 'border-gray-800 bg-gray-900 opacity-60'}`}>
       <div className="flex items-start gap-3 p-4">
@@ -36,6 +139,7 @@ function SkillCard({ skill, projectId, onToggle }) {
             {skill.is_bundled && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">bundled</span>
             )}
+            <ScanBadge scanResult={skill.scan_result} />
             {skill.schedulable && (
               <Clock className="w-3 h-3 text-amber-400" title="Schedulable" />
             )}
@@ -61,6 +165,18 @@ function SkillCard({ skill, projectId, onToggle }) {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
+            onClick={handleScan}
+            disabled={scanning}
+            title="Run security scan"
+            className="text-gray-500 hover:text-brand-400 transition-colors disabled:opacity-50"
+          >
+            {scanning ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <ScanSearch className="w-4 h-4" />
+            )}
+          </button>
+          <button
             onClick={() => onToggle(skill.name, !isEnabled)}
             title={isEnabled ? 'Disable for this project' : 'Enable for this project'}
             className="text-gray-400 hover:text-white transition-colors"
@@ -72,6 +188,13 @@ function SkillCard({ skill, projectId, onToggle }) {
             )}
           </button>
           <button
+            onClick={() => setConfirmDelete(true)}
+            title="Delete skill"
+            className="text-gray-600 hover:text-red-400 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button
             onClick={handleExpand}
             className="text-gray-500 hover:text-gray-300 transition-colors"
           >
@@ -79,6 +202,41 @@ function SkillCard({ skill, projectId, onToggle }) {
           </button>
         </div>
       </div>
+
+      {confirmDelete && (
+        <div className="border-t border-gray-700 px-4 py-3 bg-red-950/30 space-y-2">
+          {skill.is_bundled && (
+            <div className="flex items-start gap-2 text-amber-400 text-xs">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>{skill.name}</strong> is a bundled skill shipped with Pantheon.
+                Deleting it removes it from the registry until the next reload.
+              </span>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-red-300">
+              {skill.is_bundled
+                ? 'Remove from registry? (Reload will restore it)'
+                : 'Permanently delete this skill and its files?'}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-2.5 py-1 text-[11px] rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setConfirmDelete(false); onDelete(skill.name, skill.is_bundled) }}
+                className="px-2.5 py-1 text-[11px] rounded bg-red-700 text-white hover:bg-red-600 transition-colors"
+              >
+                {skill.is_bundled ? 'Remove' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {expanded && (
         <div className="border-t border-gray-700 px-4 py-3 bg-gray-850 space-y-3">
@@ -88,6 +246,9 @@ function SkillCard({ skill, projectId, onToggle }) {
             </div>
           ) : details ? (
             <>
+              {details.scan_result && (
+                <ScanResults scanResult={details.scan_result} />
+              )}
               <div>
                 <h4 className="text-xs font-medium text-gray-400 mb-1">Triggers</h4>
                 <div className="flex flex-wrap gap-1">
@@ -130,6 +291,8 @@ function SkillCard({ skill, projectId, onToggle }) {
     </div>
   )
 }
+
+// ── Main Skills component ───────────────────────────────────────────────────
 
 export default function Skills() {
   const [skills, setSkills] = useState([])
@@ -176,6 +339,39 @@ export default function Skills() {
     }
   }
 
+  const handleDelete = async (skillName, wasBundled) => {
+    try {
+      await skillsApi.delete(skillName)
+      const msg = wasBundled
+        ? `${skillName} removed from registry (reload to restore)`
+        : `${skillName} deleted`
+      addNotification({ type: 'success', message: msg })
+      await loadSkills()
+    } catch (err) {
+      addNotification({ type: 'error', message: `Failed to delete ${skillName}: ${err.message}` })
+    }
+  }
+
+  const handleScan = async (skillName) => {
+    try {
+      const res = await skillsApi.scan(skillName)
+      const scan = res.data.scan
+      if (scan?.passed) {
+        addNotification({ type: 'success', message: `${skillName}: scan passed (risk ${scan.risk_score})` })
+      } else {
+        addNotification({
+          type: 'warning',
+          message: `${skillName}: scan ${scan?.passed === false ? 'FAILED' : 'completed'} (risk ${scan?.risk_score})${res.data.quarantined ? ' — quarantined' : ''}`,
+        })
+      }
+      await loadSkills()
+      return res
+    } catch (err) {
+      addNotification({ type: 'error', message: `Scan failed for ${skillName}: ${err.message}` })
+      throw err
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto p-6 scrollbar-thin">
       <div className="max-w-4xl mx-auto">
@@ -218,6 +414,8 @@ export default function Skills() {
                 skill={skill}
                 projectId={projectId}
                 onToggle={handleToggle}
+                onDelete={handleDelete}
+                onScan={handleScan}
               />
             ))}
           </div>
