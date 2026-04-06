@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from config import get_settings
 from models.provider import get_provider, get_embedding_provider, get_prefill_provider, get_vision_provider, get_reranker_provider, reset_provider
 from secrets.vault import get_vault
+from security_log import sec_log
 
 logger = logging.getLogger(__name__)
 settings_config = get_settings()
@@ -149,6 +150,11 @@ async def update_settings(req: SettingsUpdate) -> dict[str, Any]:
         if val in ("broad", "balanced", "focused"):
             vault.set_secret("context_focus", val)
 
+    # Log which settings were changed
+    changed = [k for k, v in req.model_dump(exclude_none=True).items() if v is not None]
+    if changed:
+        sec_log.settings_updated(changed_keys=changed)
+
     # Reset provider so it picks up new settings
     reset_provider()
     logger.info("Settings updated, provider reset")
@@ -221,6 +227,48 @@ async def restart_telegram() -> dict[str, str]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Security log ─────────────────────────────────────────────────────────────
+
+@router.get("/settings/security-log")
+async def get_security_log(
+    limit: int = Query(default=200, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    """Read the security audit log (most recent entries first)."""
+    import json as _json
+
+    log_file = settings_config.data_dir / "logs" / "security.log"
+    if not log_file.exists():
+        return {"entries": [], "total": 0}
+
+    lines = log_file.read_text(encoding="utf-8").strip().splitlines()
+    total = len(lines)
+
+    # Most recent first
+    lines.reverse()
+    page = lines[offset:offset + limit]
+
+    entries = []
+    for line in page:
+        try:
+            entries.append(_json.loads(line))
+        except Exception:
+            entries.append({"raw": line})
+
+    return {"entries": entries, "total": total}
+
+
+@router.delete("/settings/security-log")
+async def clear_security_log() -> dict[str, str]:
+    """Clear the security audit log."""
+    log_file = settings_config.data_dir / "logs" / "security.log"
+    if log_file.exists():
+        log_file.write_text("", encoding="utf-8")
+    return {"status": "cleared"}
+
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+
 @router.get("/secrets")
 async def list_secrets() -> dict[str, Any]:
     """List secret keys (never values)."""
@@ -236,6 +284,7 @@ async def set_secret(key: str, req: SecretUpdate) -> dict[str, str]:
         raise HTTPException(status_code=400, detail="Invalid secret key format")
     vault = get_vault()
     vault.set_secret(key, req.value)
+    sec_log.secret_set(key=key)
     # Reset provider if it's an LLM-related secret
     if key in ("llm_base_url", "llm_api_key", "llm_model",
                 "embedding_base_url", "embedding_api_key", "embedding_model",
@@ -252,4 +301,5 @@ async def delete_secret(key: str) -> dict[str, str]:
     deleted = vault.delete_secret(key)
     if not deleted:
         raise HTTPException(status_code=404, detail="Secret not found")
+    sec_log.secret_deleted(key=key)
     return {"status": "deleted", "key": key}

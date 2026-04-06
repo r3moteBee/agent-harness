@@ -18,6 +18,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from security_log import sec_log
 from skills.models import LoadedSkill
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ def _validate_script_path(skill: LoadedSkill, script_name: str) -> Path:
 
     # Ensure the resolved path is inside the skill directory (prevent traversal)
     if not str(script_path).startswith(str(skill_dir.resolve())):
+        sec_log.skill_path_traversal_blocked(skill=skill.name, path=script_name)
         raise ValueError(f"Script path escapes skill directory: {script_name}")
 
     if not script_path.is_file():
@@ -118,6 +120,7 @@ async def execute_script(
     env = _build_safe_env(skill, extra_env)
     cwd = str(workspace_dir) if workspace_dir else str(Path(skill.skill_dir))
 
+    sec_log.skill_execution_start(skill=skill.name, script=script_name)
     logger.info(
         "Executing skill script: %s %s (timeout=%ds, cwd=%s)",
         skill.name, script_name, timeout, cwd,
@@ -168,8 +171,10 @@ async def execute_script(
         }
 
         if timed_out:
+            sec_log.skill_execution_timeout(skill=skill.name, script=script_name, timeout=timeout)
             logger.warning("Script timed out: %s/%s after %ds", skill.name, script_name, timeout)
         elif proc.returncode != 0:
+            sec_log.skill_execution_failed(skill=skill.name, script=script_name, exit_code=proc.returncode or 1)
             logger.warning(
                 "Script failed: %s/%s exit=%d stderr=%s",
                 skill.name, script_name, proc.returncode, stderr[:200],

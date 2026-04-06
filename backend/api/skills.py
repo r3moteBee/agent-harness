@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from config import get_settings
+from security_log import sec_log
 from skills.registry import get_skill_registry, reload_skill_registry
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,7 @@ async def scan_all_skills(
     failed = sum(1 for r in results if r.get("passed") is False)
     errored = sum(1 for r in results if r.get("passed") is None)
 
+    sec_log.skill_scan_all(passed=passed, failed=failed, errors=errored)
     return {
         "scanned": len(results),
         "passed": passed,
@@ -241,6 +243,7 @@ async def toggle_skill(skill_name: str, req: SkillToggleRequest) -> dict[str, An
                     detail="No security override password has been configured. Set one in Settings before using force enable.",
                 )
             if not req.override_password or req.override_password != stored_pw:
+                sec_log.skill_override_failed(skill=skill_name, reason="bad_password")
                 raise HTTPException(
                     status_code=403,
                     detail="Incorrect security override password.",
@@ -253,8 +256,13 @@ async def toggle_skill(skill_name: str, req: SkillToggleRequest) -> dict[str, An
                 status_code=403,
                 detail=result.get("message", result.get("reason", "Cannot enable")),
             )
+        if force:
+            sec_log.skill_override_used(skill=skill_name, project=req.project_id)
+        else:
+            sec_log.skill_enabled(skill=skill_name, project=req.project_id)
     else:
         registry.disable_for_project(skill_name, req.project_id)
+        sec_log.skill_disabled(skill=skill_name, project=req.project_id)
 
     return {
         "skill": skill_name,
@@ -277,10 +285,12 @@ async def delete_skill(skill_name: str) -> dict[str, Any]:
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
 
+    is_bundled = skill.is_bundled
     result = registry.delete(skill_name)
     if not result.get("deleted"):
         raise HTTPException(status_code=500, detail=result.get("error", "Delete failed"))
 
+    sec_log.skill_deleted(skill=skill_name, is_bundled=is_bundled)
     logger.info("Deleted skill '%s': %s", skill_name, result)
     return {"skill": skill_name, **result}
 
@@ -312,9 +322,17 @@ async def scan_skill_endpoint(
     skill.manifest.security_scan = result
     registry.save_scan_result(skill_name, result)
 
+    # Log scan result
+    n_findings = len(result.findings)
+    if result.passed:
+        sec_log.skill_scan_passed(skill=skill_name, risk=result.risk_score, findings=n_findings)
+    else:
+        sec_log.skill_scan_failed(skill=skill_name, risk=result.risk_score, findings=n_findings)
+
     # If the scan failed, move to quarantine (non-bundled only)
     if not result.passed and not skill.is_bundled:
         quarantine_result = _quarantine_skill(skill_name, reason="scan_failed")
+        sec_log.skill_quarantined(skill=skill_name, reason="scan_failed")
         return {
             "skill": skill_name,
             "scan": result.model_dump(),
@@ -394,6 +412,8 @@ async def quarantine_skill_endpoint(skill_name: str) -> dict[str, Any]:
     result = _quarantine_skill(skill_name, reason="manual")
     if result.get("error") == "not_found":
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
+    if result.get("quarantined"):
+        sec_log.skill_quarantined(skill=skill_name, reason="manual")
     return {"skill": skill_name, **result}
 
 
@@ -426,6 +446,7 @@ async def unquarantine_skill(skill_name: str) -> dict[str, Any]:
     try:
         shutil.move(str(quarantined_path), str(dest))
         reload_skill_registry()
+        sec_log.skill_unquarantined(skill=skill_name)
         logger.info("Restored skill '%s' from quarantine", skill_name)
         return {"skill": skill_name, "restored": True}
     except Exception as e:

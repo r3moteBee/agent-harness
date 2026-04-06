@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from config import get_settings
+from security_log import sec_log
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -50,6 +51,8 @@ async def login(req: LoginRequest) -> LoginResponse:
         valid = False
 
     if not valid:
+        sec_log.auth_login_failure(reason="bad_password")
         raise HTTPException(status_code=401, detail="Invalid password")
 
+    sec_log.auth_login_success()
     return LoginResponse(token=expected)

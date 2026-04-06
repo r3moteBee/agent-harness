@@ -152,6 +152,9 @@ export const settingsApi = {
   setSecret: (key, value) => api.put(`/api/secrets/${key}`, { value }),
   deleteSecret: (key) => api.delete(`/api/secrets/${key}`),
   restartTelegram: () => api.post('/api/settings/restart-telegram'),
+  getSecurityLog: (limit = 200, offset = 0) =>
+    api.get('/api/settings/security-log', { params: { limit, offset } }),
+  clearSecurityLog: () => api.delete('/api/settings/security-log'),
 }
 
 // MCP Connections API

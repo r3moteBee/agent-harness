@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from config import get_settings
+from security_log import sec_log
 from skills.models import LoadedSkill, ScanResult, SkillManifest, ProjectSkillSettings
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,10 @@ class SkillRegistry:
                     skill = self._load_skill(skill_dir, is_bundled=False)
                     if skill:
                         if skill.name in self._bundled_names:
+                            sec_log.skill_name_collision_blocked(
+                                skill=skill.name,
+                                reason=f"user skill from {skill_dir} tried to override bundled skill",
+                            )
                             logger.warning(
                                 "BLOCKED: User skill '%s' from %s cannot override "
                                 "bundled skill of the same name — skipping",
