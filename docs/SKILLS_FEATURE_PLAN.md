@@ -845,15 +845,46 @@ All 12 backend + frontend checklist items are implemented and all 8 planned bund
 - [x] Name masquerade prevention ✅ `_bundled_names` set in registry tracks all bundled skill names. User-installed skills with colliding names are blocked at load time with logged warning. `is_bundled_name()` check on unquarantine prevents restoring over a bundled skill (409 Conflict).
 - [x] Bundled flag spoofing prevention ✅ `is_bundled` flag set exclusively by the loader based on source directory — never read from `skill.json` content. Prevents imported skills from claiming bundled status to bypass scan gates.
 
+### Phase 2 Completion Assessment (2026-04-06)
+
+**Status: ✅ PHASE 2 COMPLETE — Ready to proceed to Phase 3**
+
+All 5 core checklist items plus 5 security hardening items are implemented. The scanner is operational with full three-layer analysis, quarantine flow, and a dedicated Security tab in the frontend.
+
+| Category | Planned | Done | Notes |
+|----------|---------|------|-------|
+| Scanner layers | 3 | 3 | Static, Capability, AI Review all operational |
+| Quarantine flow | 1 | 1 | Auto-quarantine on failure, manual quarantine/restore, bundled skill protection |
+| Frontend security UI | 1 | 2 | ScanBadge per-skill + SkillScanDashboard with summary cards and severity table |
+| Runtime sandbox | 1 | 1 | Subprocess-only execution, env filtering, path traversal prevention, timeout/output limits |
+| Hardening extras | 5 | 5 | Scan gate, persistence with hashing, dashboard, name masquerade prevention, bundled flag spoofing prevention |
+| Security audit log | — | ✅ | Not in Phase 2 plan but delivered: `security_log.py` with JSON-structured event logging |
+| Security override | — | ✅ | Force-enable with vault-stored password, logged as override event |
+
+**Key deliverables beyond plan:**
+1. `backend/security_log.py` — Centralized structured security audit log (`data/logs/security.log`) with typed event methods for auth, scanning, quarantine, execution, vault, and settings events
+2. Security override password flow — Vault-stored password for force-enabling skills that failed scan, with full audit logging
+3. Test skills (`shady-exfiltrator`, `web-monitor`) for scanner demonstration and validation
+4. Risk scores displayed as percentages in the frontend
+
+**Minor gaps / items to carry forward:**
+1. Network domain enforcement at runtime (permissions.network_domains) — declared in manifest model but subprocess proxy not yet implemented
+2. Memory tier permission enforcement at runtime — declared in model but not enforced during skill execution
+3. File path restriction enforcement at runtime — workspace globs declared but not enforced beyond path traversal check
+
+---
+
 ### Phase 3: Hub Import (1-2 weeks)
 **Goal: Import skills from external hubs**
 
-- [ ] Hub adapter interface + Smithery adapter
-- [ ] SKILL.md format adapter (SkillsMP/SkillsLLM compatibility)
-- [ ] GitHub repo adapter
-- [ ] Local upload (.tar.gz/.zip)
-- [ ] `SkillImporter.jsx` — Import modal with hub search
-- [ ] Auto-scan on import
+- [x] Hub adapter interface + Smithery adapter ✅ `backend/skills/importer.py` — HubAdapter ABC, SmitheryAdapter with search/fetch/normalize, Smithery registry API integration
+- [x] SKILL.md format adapter (SkillsMP/SkillsLLM compatibility) ✅ SkillMdAdapter with YAML frontmatter parsing, fallback simple parser, auto-generates skill.json + instructions.md
+- [x] GitHub repo adapter ✅ GitHubAdapter with repo search (topic filtering), zip download, auto-format detection (Pantheon/SKILL.md/MCP/README fallback)
+- [x] Local upload (.tar.gz/.zip) ✅ LocalUploadAdapter with zip/tar.gz/tar extraction, path traversal protection, auto-flatten single subdirectory, format detection delegation
+- [x] `SkillImporter.jsx` — Import modal with hub search ✅ Tabbed modal (Search Hubs / GitHub / Upload), drag-and-drop file upload, search result cards, AI review toggle, import result banners
+- [x] Auto-scan on import ✅ Importer orchestrator runs full scan pipeline (Layer 1-3) on every import, auto-quarantines failed scans, reloads registry after install
+- [x] Import API endpoints ✅ GET /skills/hubs, POST /skills/search-hub, POST /skills/import, POST /skills/import/upload (multipart), plus skillsApi client methods
+- [x] Frontend integration ✅ Import button in Skills Library header, modal overlay, skill list auto-refresh on import
 
 ### Phase 4: AI-Assisted Editor (1-2 weeks)
 **Goal: Create and iterate on skills in the browser**

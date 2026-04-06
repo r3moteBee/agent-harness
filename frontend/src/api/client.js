@@ -203,6 +203,23 @@ export const skillsApi = {
   getDiscovery: (projectId) => api.get(`/api/skills/discovery/${projectId}`),
   setDiscovery: (projectId, mode) =>
     api.put(`/api/skills/discovery/${projectId}`, null, { params: { mode } }),
+
+  // Import
+  listHubs: () => api.get('/api/skills/hubs'),
+  searchHub: (query, hub = null) =>
+    api.post('/api/skills/search-hub', null, {
+      params: { query, ...(hub && { hub }) },
+    }),
+  importSkill: (source, hub = 'local', aiReview = true) =>
+    api.post('/api/skills/import', { source, hub, ai_review: aiReview }),
+  importUpload: (file, aiReview = true) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/api/skills/import/upload', formData, {
+      params: { ai_review: aiReview },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 // Tasks API

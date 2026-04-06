@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { Zap, RefreshCw, ChevronDown, ChevronRight, Brain, Clock, Shield, BookOpen, ToggleLeft, ToggleRight, Trash2, AlertTriangle, ShieldCheck, ShieldAlert, ShieldX, ScanSearch } from 'lucide-react'
+import { Zap, RefreshCw, ChevronDown, ChevronRight, Brain, Clock, Shield, BookOpen, ToggleLeft, ToggleRight, Trash2, AlertTriangle, ShieldCheck, ShieldAlert, ShieldX, ScanSearch, Download } from 'lucide-react'
 import { useStore } from '../store'
 import { skillsApi } from '../api/client'
+import SkillImporter from './SkillImporter'
 
 // ── Scan badge component ────────────────────────────────────────────────────
 
@@ -368,6 +369,7 @@ export default function Skills() {
   const [loading, setLoading] = useState(true)
   const [reloading, setReloading] = useState(false)
   const [overrideTarget, setOverrideTarget] = useState(null) // skill name pending override
+  const [showImporter, setShowImporter] = useState(false)
   const activeProject = useStore((s) => s.activeProject)
   const addNotification = useStore((s) => s.addNotification)
 
@@ -481,14 +483,23 @@ export default function Skills() {
             <h1 className="text-lg font-semibold text-white">Skills Library</h1>
             <span className="text-xs text-gray-500">{skills.length} skills</span>
           </div>
-          <button
-            onClick={handleReload}
-            disabled={reloading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3 h-3 ${reloading ? 'animate-spin' : ''}`} />
-            Reload
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowImporter(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-500 text-xs text-white font-medium transition-colors"
+            >
+              <Download className="w-3 h-3" />
+              Import
+            </button>
+            <button
+              onClick={handleReload}
+              disabled={reloading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 ${reloading ? 'animate-spin' : ''}`} />
+              Reload
+            </button>
+          </div>
         </div>
 
         <p className="text-sm text-gray-400 mb-6">
@@ -529,6 +540,19 @@ export default function Skills() {
           onConfirm={handleForceEnable}
           onCancel={() => setOverrideTarget(null)}
         />
+      )}
+
+      {/* Import modal */}
+      {showImporter && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <SkillImporter
+            onClose={() => setShowImporter(false)}
+            onImportComplete={async () => {
+              await loadSkills()
+              addNotification({ type: 'success', message: 'Skill library updated' })
+            }}
+          />
+        </div>
       )}
     </div>
   )

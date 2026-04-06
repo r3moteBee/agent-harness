@@ -12,7 +12,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 
 from config import get_settings
@@ -190,6 +190,108 @@ async def override_status() -> dict[str, Any]:
     vault = get_vault()
     pw = vault.get_secret("skill_security_override_password")
     return {"configured": bool(pw)}
+
+
+# ── Hub import endpoints ────────────────────────────────────────────────────
+
+@router.get("/skills/hubs")
+async def list_hubs() -> dict[str, Any]:
+    """List available import hub sources."""
+    from skills.importer import list_hubs as _list_hubs
+    return {"hubs": _list_hubs()}
+
+
+@router.post("/skills/search-hub")
+async def search_hub(
+    query: str = Query(..., description="Search query"),
+    hub: str | None = Query(default=None, description="Specific hub to search (or all)"),
+) -> dict[str, Any]:
+    """Search hubs for importable skills."""
+    from skills.importer import search_hubs
+    results = await search_hubs(query, hub=hub)
+    return {
+        "results": [r.model_dump() for r in results],
+        "count": len(results),
+        "query": query,
+        "hub": hub or "all",
+    }
+
+
+class SkillImportRequest(BaseModel):
+    source: str
+    hub: str = "local"
+    ai_review: bool = True
+
+
+@router.post("/skills/import")
+async def import_skill_endpoint(req: SkillImportRequest) -> dict[str, Any]:
+    """Import a skill from a hub URL, GitHub repo, or local path.
+
+    Body:
+        source: URL, repo identifier, or local file path
+        hub: "smithery" | "github" | "local" | "skill_md"
+        ai_review: Whether to run AI review during scan (default true)
+    """
+    from skills.importer import import_skill
+    result = await import_skill(
+        source=req.source,
+        hub=req.hub,
+        run_scan=True,
+        ai_review=req.ai_review,
+    )
+
+    # Log the import
+    if result.success:
+        sec_log.skill_scan_passed(
+            skill=result.skill_name,
+            risk=result.scan_risk or 0.0,
+            findings=result.scan_findings,
+        ) if result.scan_passed else None
+        logger.info(
+            "Skill imported: %s from %s (hub=%s, quarantined=%s)",
+            result.skill_name, result.source, req.hub, result.quarantined,
+        )
+    else:
+        logger.warning("Skill import failed: %s from %s", result.message, result.source)
+
+    return result.model_dump()
+
+
+@router.post("/skills/import/upload")
+async def import_upload(
+    file: UploadFile = File(...),
+    ai_review: bool = Query(default=True),
+) -> dict[str, Any]:
+    """Import a skill from an uploaded archive file (.tar.gz, .zip)."""
+    import tempfile
+
+    if file is None:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+
+    # Save uploaded file to temp location
+    suffix = Path(file.filename).suffix if file.filename else ".zip"
+    name = file.filename or "upload"
+    if name.endswith(".tar.gz") or name.endswith(".tgz"):
+        suffix = ".tar.gz"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, prefix="skill_upload_") as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        from skills.importer import import_skill
+        result = await import_skill(
+            source=tmp_path,
+            hub="local",
+            run_scan=True,
+            ai_review=ai_review,
+        )
+        if result.success:
+            logger.info("Skill uploaded and imported: %s", result.skill_name)
+        return result.model_dump()
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
