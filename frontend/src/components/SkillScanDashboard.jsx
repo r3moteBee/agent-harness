@@ -109,7 +109,7 @@ function SkillRow({ skill, onDelete, onDataChange }) {
       setLoadingScan(true)
       try {
         const res = await skillsApi.getScan(skill.name)
-        setScanResult(res.data)
+        setScanResult(res.data.scan || res.data)
       } catch (err) {
         // scan result might not exist yet
         setScanResult(null)
