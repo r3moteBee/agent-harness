@@ -69,7 +69,7 @@ function ScanFindings({ scanResult }) {
       <div className={`flex items-center gap-3 text-xs px-3 py-2 rounded ${passed ? 'bg-green-900/20 text-green-400' : 'bg-red-900/20 text-red-400'}`}>
         {passed ? <ShieldCheck className="w-4 h-4" /> : <ShieldX className="w-4 h-4" />}
         <span className="font-medium">{passed ? 'PASSED' : 'FAILED'}</span>
-        <span className="text-gray-500">Risk score: {risk_score}</span>
+        <span className="text-gray-500">Risk: {Math.round((risk_score || 0) * 100)}%</span>
         <span className="text-gray-500">
           {criticals.length} critical · {warnings.length} warnings · {infos.length} info
         </span>
@@ -186,8 +186,8 @@ function SkillRow({ skill, onDelete, onDataChange }) {
             <span className="text-[10px] text-gray-500">{skill.findings_count} findings</span>
           )}
           {skill.risk_score != null && skill.risk_score > 0 && (
-            <span className={`text-[10px] font-mono ${skill.risk_score >= 0.5 ? 'text-red-400' : 'text-amber-400'}`}>
-              risk: {skill.risk_score}
+            <span className={`text-[10px] font-mono ${skill.risk_score >= 0.5 ? 'text-red-400' : skill.risk_score >= 0.2 ? 'text-amber-400' : 'text-yellow-500'}`}>
+              risk: {Math.round(skill.risk_score * 100)}%
             </span>
           )}
           <StatusBadge status={skill.scan_status} />

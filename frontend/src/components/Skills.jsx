@@ -68,7 +68,7 @@ function ScanResults({ scanResult }) {
       <div className={`flex items-center gap-3 text-xs px-3 py-2 rounded ${passed ? 'bg-green-900/20 text-green-400' : 'bg-red-900/20 text-red-400'}`}>
         {passed ? <ShieldCheck className="w-4 h-4" /> : <ShieldX className="w-4 h-4" />}
         <span className="font-medium">{passed ? 'PASSED' : 'FAILED'}</span>
-        <span className="text-gray-500">Risk score: {risk_score}</span>
+        <span className="text-gray-500">Risk: {Math.round((risk_score || 0) * 100)}%</span>
         <span className="text-gray-500">
           {criticals.length} critical · {warnings.length} warnings · {infos.length} info
         </span>
