@@ -635,7 +635,7 @@ export default function Chat() {
             onClick={() => fileInputRef.current?.click()}
             disabled={isStreaming || uploading}
             title="Attach file (uploaded to workspace and indexed into memory)"
-            className="flex-shrink-0 w-10 h-10 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-gray-400 hover:text-gray-200 rounded-xl flex items-center justify-center transition-colors"
+            className="flex-shrink-0 w-10 h-10 mb-[4px] bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-gray-400 hover:text-gray-200 rounded-xl flex items-center justify-center transition-colors"
           >
             <Paperclip className="w-4 h-4" />
           </button>
@@ -709,7 +709,7 @@ export default function Chat() {
           {isStreaming ? (
             <button
               onClick={stopStreaming}
-              className="flex-shrink-0 w-10 h-10 bg-red-600 hover:bg-red-700 text-white rounded-xl flex items-center justify-center transition-colors"
+              className="flex-shrink-0 w-10 h-10 mb-[4px] bg-red-600 hover:bg-red-700 text-white rounded-xl flex items-center justify-center transition-colors"
             >
               <Square className="w-4 h-4" />
             </button>
@@ -717,7 +717,7 @@ export default function Chat() {
             <button
               onClick={sendMessage}
               disabled={(!input.trim() && attachments.length === 0) || uploading}
-              className="flex-shrink-0 w-10 h-10 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl flex items-center justify-center transition-colors"
+              className="flex-shrink-0 w-10 h-10 mb-[4px] bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl flex items-center justify-center transition-colors"
             >
               <Send className="w-4 h-4" />
             </button>
