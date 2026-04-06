@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { ShieldCheck, ShieldAlert, ShieldX, ShieldQuestion, ScanSearch, RefreshCw, AlertTriangle, Package } from 'lucide-react'
+import {
+  ShieldCheck, ShieldAlert, ShieldX, ShieldQuestion, ScanSearch, RefreshCw,
+  AlertTriangle, Package, ChevronDown, ChevronRight, Trash2, Eye
+} from 'lucide-react'
 import { useStore } from '../store'
 import { skillsApi } from '../api/client'
 
@@ -34,6 +37,235 @@ function CountCard({ label, count, icon: Icon, color, total }) {
     </div>
   )
 }
+
+// ── Inline scan results (reused from Skills.jsx pattern) ───────────────────
+
+const SEVERITY_COLOR = {
+  critical: 'text-red-400 bg-red-900/30',
+  warning: 'text-amber-400 bg-amber-900/30',
+  info: 'text-blue-400 bg-blue-900/30',
+}
+
+function ScanFindings({ scanResult }) {
+  if (!scanResult) return <p className="text-xs text-gray-500">No scan data available.</p>
+
+  const { passed, risk_score, findings, scanned_at, scanner_version } = scanResult
+  const criticals = findings?.filter((f) => f.severity === 'critical') || []
+  const warnings = findings?.filter((f) => f.severity === 'warning') || []
+  const infos = findings?.filter((f) => f.severity === 'info') || []
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-medium text-gray-400 flex items-center gap-1">
+          <ScanSearch className="w-3 h-3" /> Security Scan
+        </h4>
+        <div className="flex items-center gap-2 text-[10px] text-gray-600">
+          {scanner_version && <span>v{scanner_version}</span>}
+          {scanned_at && <span>{new Date(scanned_at).toLocaleString()}</span>}
+        </div>
+      </div>
+
+      <div className={`flex items-center gap-3 text-xs px-3 py-2 rounded ${passed ? 'bg-green-900/20 text-green-400' : 'bg-red-900/20 text-red-400'}`}>
+        {passed ? <ShieldCheck className="w-4 h-4" /> : <ShieldX className="w-4 h-4" />}
+        <span className="font-medium">{passed ? 'PASSED' : 'FAILED'}</span>
+        <span className="text-gray-500">Risk score: {risk_score}</span>
+        <span className="text-gray-500">
+          {criticals.length} critical · {warnings.length} warnings · {infos.length} info
+        </span>
+      </div>
+
+      {findings?.length > 0 && (
+        <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-thin">
+          {findings.map((f, i) => (
+            <div key={i} className={`flex items-start gap-2 text-[11px] px-2 py-1.5 rounded ${SEVERITY_COLOR[f.severity] || SEVERITY_COLOR.info}`}>
+              <span className="font-mono uppercase font-bold w-14 flex-shrink-0">{f.severity}</span>
+              <span className="text-gray-300 flex-1">{f.message}</span>
+              {f.file && <span className="font-mono text-gray-600 flex-shrink-0">{f.file}{f.line ? `:${f.line}` : ''}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(!findings || findings.length === 0) && (
+        <p className="text-[11px] text-gray-600 px-2">No findings.</p>
+      )}
+    </div>
+  )
+}
+
+// ── Skill row with expand + delete ─────────────────────────────────────────
+
+function SkillRow({ skill, onDelete, onDataChange }) {
+  const [expanded, setExpanded] = useState(false)
+  const [scanResult, setScanResult] = useState(null)
+  const [loadingScan, setLoadingScan] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const addNotification = useStore((s) => s.addNotification)
+
+  const handleExpand = async () => {
+    if (!expanded && !scanResult && skill.scan_status !== 'unscanned') {
+      setLoadingScan(true)
+      try {
+        const res = await skillsApi.getScan(skill.name)
+        setScanResult(res.data)
+      } catch (err) {
+        // scan result might not exist yet
+        setScanResult(null)
+      }
+      setLoadingScan(false)
+    }
+    setExpanded(!expanded)
+  }
+
+  const handleScan = async (e) => {
+    e.stopPropagation()
+    setScanning(true)
+    try {
+      const res = await skillsApi.scan(skill.name)
+      const scan = res.data.scan
+      setScanResult(scan)
+      if (scan?.passed) {
+        addNotification({ type: 'success', message: `${skill.name}: scan passed (risk ${scan.risk_score})` })
+      } else {
+        addNotification({
+          type: 'warning',
+          message: `${skill.name}: scan FAILED (risk ${scan?.risk_score})${res.data.quarantined ? ' — quarantined' : ''}`,
+        })
+      }
+      onDataChange()
+    } catch (err) {
+      addNotification({ type: 'error', message: `Scan failed for ${skill.name}: ${err.message}` })
+    }
+    setScanning(false)
+  }
+
+  const handleDelete = async () => {
+    setConfirmDelete(false)
+    try {
+      await skillsApi.delete(skill.name)
+      const msg = skill.is_bundled
+        ? `${skill.name} removed from registry (reload to restore)`
+        : `${skill.name} deleted`
+      addNotification({ type: 'success', message: msg })
+      onDataChange()
+    } catch (err) {
+      addNotification({ type: 'error', message: `Failed to delete ${skill.name}: ${err.message}` })
+    }
+  }
+
+  return (
+    <div className="border-b border-gray-750 last:border-b-0">
+      {/* Main row */}
+      <div
+        className="flex items-center gap-4 px-4 py-2.5 hover:bg-gray-750 transition-colors cursor-pointer"
+        onClick={handleExpand}
+      >
+        <div className="text-gray-600">
+          {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-white font-medium">{skill.name}</span>
+            {skill.is_bundled && (
+              <span className="text-[9px] px-1 py-0 rounded bg-gray-700 text-gray-500">bundled</span>
+            )}
+            {skill.has_scripts && (
+              <span className="text-[9px] px-1 py-0 rounded bg-amber-900/40 text-amber-500">has scripts</span>
+            )}
+          </div>
+          {skill.scanned_at && (
+            <span className="text-[10px] text-gray-600">
+              Scanned {new Date(skill.scanned_at).toLocaleString()}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {skill.findings_count > 0 && (
+            <span className="text-[10px] text-gray-500">{skill.findings_count} findings</span>
+          )}
+          {skill.risk_score != null && skill.risk_score > 0 && (
+            <span className={`text-[10px] font-mono ${skill.risk_score >= 0.5 ? 'text-red-400' : 'text-amber-400'}`}>
+              risk: {skill.risk_score}
+            </span>
+          )}
+          <StatusBadge status={skill.scan_status} />
+
+          {/* Scan button */}
+          <button
+            onClick={handleScan}
+            disabled={scanning}
+            title="Run security scan"
+            className="text-gray-500 hover:text-brand-400 transition-colors disabled:opacity-50"
+          >
+            {scanning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ScanSearch className="w-3.5 h-3.5" />}
+          </button>
+
+          {/* Delete button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setConfirmDelete(true) }}
+            title="Delete skill"
+            className="text-gray-600 hover:text-red-400 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <div className="px-4 py-3 bg-red-950/30 border-t border-gray-700 space-y-2">
+          {skill.is_bundled && (
+            <div className="flex items-start gap-2 text-amber-400 text-xs">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>{skill.name}</strong> is a bundled skill shipped with Pantheon.
+                Deleting it removes it from the registry until the next reload.
+              </span>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-red-300">
+              {skill.is_bundled
+                ? 'Remove from registry? (Reload will restore it)'
+                : 'Permanently delete this skill and its files?'}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirmDelete(false) }}
+                className="px-2.5 py-1 text-[11px] rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDelete() }}
+                className="px-2.5 py-1 text-[11px] rounded bg-red-700 text-white hover:bg-red-600 transition-colors"
+              >
+                {skill.is_bundled ? 'Remove' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded scan details */}
+      {expanded && (
+        <div className="px-4 py-3 bg-gray-850 border-t border-gray-700">
+          {loadingScan ? (
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <RefreshCw className="w-3 h-3 animate-spin" /> Loading scan results...
+            </div>
+          ) : (
+            <ScanFindings scanResult={scanResult} />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main dashboard component ───────────────────────────────────────────────
 
 export default function SkillScanDashboard() {
   const [summary, setSummary] = useState(null)
@@ -81,6 +313,16 @@ export default function SkillScanDashboard() {
       await loadData()
     } catch (err) {
       addNotification({ type: 'error', message: `Restore failed: ${err.message}` })
+    }
+  }
+
+  const handleDeleteQuarantined = async (skillName) => {
+    try {
+      await skillsApi.delete(skillName)
+      addNotification({ type: 'success', message: `${skillName} deleted` })
+      await loadData()
+    } catch (err) {
+      addNotification({ type: 'error', message: `Failed to delete ${skillName}: ${err.message}` })
     }
   }
 
@@ -137,41 +379,22 @@ export default function SkillScanDashboard() {
         {/* Skills table */}
         <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
           <div className="px-4 py-2.5 border-b border-gray-700 bg-gray-850">
-            <h2 className="text-xs font-medium text-gray-400">All Skills</h2>
+            <h2 className="text-xs font-medium text-gray-400">All Skills — click to view scan details</h2>
           </div>
-          <div className="divide-y divide-gray-750">
-            {sorted.map((skill) => (
-              <div key={skill.name} className="flex items-center gap-4 px-4 py-2.5 hover:bg-gray-750 transition-colors">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-white font-medium">{skill.name}</span>
-                    {skill.is_bundled && (
-                      <span className="text-[9px] px-1 py-0 rounded bg-gray-700 text-gray-500">bundled</span>
-                    )}
-                    {skill.has_scripts && (
-                      <span className="text-[9px] px-1 py-0 rounded bg-amber-900/40 text-amber-500">has scripts</span>
-                    )}
-                  </div>
-                  {skill.scanned_at && (
-                    <span className="text-[10px] text-gray-600">
-                      Scanned {new Date(skill.scanned_at).toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  {skill.findings_count > 0 && (
-                    <span className="text-[10px] text-gray-500">{skill.findings_count} findings</span>
-                  )}
-                  {skill.risk_score != null && skill.risk_score > 0 && (
-                    <span className={`text-[10px] font-mono ${skill.risk_score >= 0.5 ? 'text-red-400' : 'text-amber-400'}`}>
-                      risk: {skill.risk_score}
-                    </span>
-                  )}
-                  <StatusBadge status={skill.scan_status} />
-                </div>
-              </div>
-            ))}
-          </div>
+          {sorted.length === 0 ? (
+            <div className="px-4 py-6 text-center text-xs text-gray-600">No skills loaded.</div>
+          ) : (
+            <div>
+              {sorted.map((skill) => (
+                <SkillRow
+                  key={skill.name}
+                  skill={skill}
+                  onDelete={() => {}} // handled internally
+                  onDataChange={loadData}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Quarantine section */}
@@ -188,12 +411,20 @@ export default function SkillScanDashboard() {
                     <span className="text-sm text-red-300">{q.name}</span>
                     {q.description && <p className="text-[10px] text-gray-600 mt-0.5">{q.description}</p>}
                   </div>
-                  <button
-                    onClick={() => handleUnquarantine(q.name)}
-                    className="text-[11px] px-2.5 py-1 rounded bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-                  >
-                    Restore
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleDeleteQuarantined(q.name)}
+                      className="text-[11px] px-2.5 py-1 rounded bg-red-900/40 text-red-400 hover:text-red-300 hover:bg-red-900/60 transition-colors"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => handleUnquarantine(q.name)}
+                      className="text-[11px] px-2.5 py-1 rounded bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+                    >
+                      Restore
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
